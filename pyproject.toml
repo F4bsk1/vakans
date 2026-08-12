@@ -59,7 +59,8 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF", "ASYNC", "DTZ"]
 pythonpath = ["backend"]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-asyncio_default_fixture_loop_scope = "function"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
 markers = [
     "live: hits the real network (deselected by default)",
     "db_commit: needs real commits, not the savepoint-rollback fixture",

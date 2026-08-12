@@ -1,0 +1,157 @@
+{
+  "_comment": [
+    "Hardcoded demo clinic for step 1 (spec §2 'Seed-regler' runs from a clinic_profile).",
+    "FICTIONAL: this clinic does not exist. Do not replace with a real clinic's data --",
+    "real clinics arrive through the ingestion pipeline, which stamps meta.source=ingestion",
+    "and requires the review.py approval gate before they can be seeded.",
+    "Spec-shaped, so it validates through ClinicProfile.from_spec_json() exactly like an",
+    "ingestion artifact does."
+  ],
+  "clinic_profile": {
+    "schema_version": "1.0",
+    "name": "Rörelsekliniken Vasastan",
+    "city": "Stockholm",
+    "address": "Sankt Eriksgatan 42, 113 34 Stockholm",
+    "phone": "+46812345678",
+    "email": "info@rorelseklinikenvasastan.example",
+    "booking_system_hint": "kaddio",
+    "opening_hours": [
+      { "day": "mon", "open": "08:00", "close": "17:00" },
+      { "day": "tue", "open": "08:00", "close": "17:00" },
+      { "day": "wed", "open": "08:00", "close": "17:00" },
+      { "day": "thu", "open": "08:00", "close": "17:00" },
+      { "day": "fri", "open": "08:00", "close": "17:00" },
+      { "day": "sat", "closed": true },
+      { "day": "sun", "closed": true }
+    ],
+    "staff": [
+      {
+        "name": "Johanna Lindqvist",
+        "title": "Leg. fysioterapeut",
+        "specialties": ["Knä och höft", "Löparskador", "Rehabträning"]
+      },
+      {
+        "name": "Marcus Ohlsson",
+        "title": "Leg. naprapat",
+        "specialties": ["Rygg och nacke", "Idrottsskador"]
+      },
+      {
+        "name": "Priya Raman",
+        "title": "Leg. fysioterapeut",
+        "specialties": ["Axel och skuldra", "Postoperativ rehab", "Yrsel"]
+      },
+      {
+        "name": "Erik Sandberg",
+        "title": "Massageterapeut",
+        "specialties": ["Klassisk massage", "Triggerpunktsbehandling"]
+      }
+    ],
+    "services": [
+      {
+        "name": "Nybesök fysioterapi",
+        "duration_min": 45,
+        "price_sek": 895.0,
+        "category": "fysio",
+        "description": "Första besöket med undersökning, bedömning och behandlingsplan.",
+        "bookable": true
+      },
+      {
+        "name": "Återbesök fysioterapi",
+        "duration_min": 30,
+        "price_sek": 695.0,
+        "category": "fysio",
+        "description": "Uppföljande behandling.",
+        "bookable": true
+      },
+      {
+        "name": "Nybesök naprapati",
+        "duration_min": 45,
+        "price_sek": 850.0,
+        "category": "naprapati",
+        "description": "Undersökning och manuell behandling av rygg, nacke och leder.",
+        "bookable": true
+      },
+      {
+        "name": "Återbesök naprapati",
+        "duration_min": 30,
+        "price_sek": 650.0,
+        "category": "naprapati",
+        "bookable": true
+      },
+      {
+        "name": "Idrottsmedicinsk undersökning",
+        "duration_min": 60,
+        "price_sek": 1195.0,
+        "category": "fysio",
+        "description": "Utökad undersökning för idrottare med rörelseanalys.",
+        "bookable": true
+      },
+      {
+        "name": "Klassisk massage 60 min",
+        "duration_min": 60,
+        "price_sek": 750.0,
+        "category": "massage",
+        "bookable": true
+      },
+      {
+        "name": "Klassisk massage 30 min",
+        "duration_min": 30,
+        "price_sek": 495.0,
+        "category": "massage",
+        "bookable": true
+      },
+      {
+        "name": "Stötvågsbehandling",
+        "duration_min": 30,
+        "price_sek": 795.0,
+        "category": "fysio",
+        "description": "Behandling vid senbesvär, till exempel hälsena eller tennisarmbåge.",
+        "bookable": true
+      }
+    ],
+    "policies": {
+      "cancellation": "Avbokning ska ske senast 24 timmar före besöket, annars debiteras hela beloppet.",
+      "late_fee": "Uteblivet besök debiteras med full avgift.",
+      "insurance_accepted": ["If", "Skandia", "Euro Accident", "Länsförsäkringar"],
+      "referral_needed": false
+    },
+    "practical": {
+      "parking": "Det finns boendeparkering på Sankt Eriksgatan och ett garage i samma kvarter.",
+      "transit": "Närmaste tunnelbana är Sankt Eriksplan, ungefär tre minuters promenad.",
+      "accessibility": "Mottagningen ligger på bottenplan och är tillgänglig med rullstol."
+    },
+    "faq": [
+      {
+        "q": "Behöver jag remiss?",
+        "a": "Nej, du behöver ingen remiss för att boka tid hos oss. Du kan boka direkt.",
+        "source_url": "https://rorelseklinikenvasastan.example/vanliga-fragor"
+      },
+      {
+        "q": "Vad kostar ett nybesök?",
+        "a": "Ett nybesök hos fysioterapeut kostar 895 kronor och tar 45 minuter.",
+        "source_url": "https://rorelseklinikenvasastan.example/priser"
+      },
+      {
+        "q": "Hur avbokar jag min tid?",
+        "a": "Ring oss senast 24 timmar innan besöket, annars debiteras hela beloppet.",
+        "source_url": "https://rorelseklinikenvasastan.example/villkor"
+      },
+      {
+        "q": "Kan jag parkera i närheten?",
+        "a": "Ja, det finns boendeparkering på gatan och ett garage i samma kvarter.",
+        "source_url": "https://rorelseklinikenvasastan.example/hitta-hit"
+      },
+      {
+        "q": "Tar ni emot försäkringspatienter?",
+        "a": "Ja, vi har avtal med If, Skandia, Euro Accident och Länsförsäkringar.",
+        "source_url": "https://rorelseklinikenvasastan.example/forsakring"
+      },
+      {
+        "q": "Vilka öppettider har ni?",
+        "a": "Vi har öppet vardagar mellan klockan åtta och sjutton. Helger håller vi stängt.",
+        "source_url": "https://rorelseklinikenvasastan.example/kontakt"
+      }
+    ],
+    "confidence_notes": ""
+  }
+}
