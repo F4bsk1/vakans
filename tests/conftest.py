@@ -21,6 +21,7 @@ from pathlib import Path
 import psycopg
 import pytest
 from alembic.config import Config
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncConnection,
@@ -113,6 +114,31 @@ async def db_session(db_connection: AsyncConnection) -> AsyncIterator[AsyncSessi
     async with maker() as session:
         yield session
     await trans.rollback()
+
+
+@pytest.fixture
+async def client(db_session: AsyncSession, settings: Settings) -> AsyncIterator[AsyncClient]:
+    """HTTP client bound to the per-test session.
+
+    `get_session` is overridden to hand back the same savepoint-backed session the test uses,
+    so a handler calling `session.commit()` releases the savepoint while the outer transaction
+    still rolls back at teardown. That keeps API tests as isolated as unit tests.
+    """
+    from app.db import get_session
+    from app.main import create_app
+
+    app = create_app()
+
+    async def _session_override() -> AsyncIterator[AsyncSession]:
+        yield db_session
+
+    app.dependency_overrides[get_session] = _session_override
+    app.dependency_overrides[get_settings] = lambda: settings
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://testserver"
+    ) as http_client:
+        yield http_client
 
 
 @pytest.fixture
