@@ -1,0 +1,124 @@
+"""Application settings.
+
+One source of truth for every knob. Two rules worth stating up front:
+
+1. `database_url` is normalised so that pointing at Supabase EU really is a single env-var
+   change (charter §3: "Migration path: Aiven/Scaleway/self-hosted at production").
+2. Credentials are `SecretStr` and never logged. Log `safe_database_url` instead.
+"""
+
+from __future__ import annotations
+
+import re
+from functools import lru_cache
+from pathlib import Path
+from typing import Literal
+
+from pydantic import AliasChoices, Field, SecretStr, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "db", "host.docker.internal"})
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_prefix="VAKANS_",
+        extra="ignore",
+        case_sensitive=False,
+    )
+
+    env: Literal["local", "test", "demo"] = "local"
+
+    # --- database ------------------------------------------------------------------------
+    # AliasChoices because hosting platforms inject a bare DATABASE_URL.
+    database_url: str = Field(
+        default="postgresql+psycopg://vakans:vakans@localhost:55432/vakans",
+        validation_alias=AliasChoices("VAKANS_DATABASE_URL", "DATABASE_URL"),
+    )
+    test_database_name: str = "vakans_test"
+    db_echo: bool = False
+
+    # --- locale --------------------------------------------------------------------------
+    default_timezone: str = "Europe/Stockholm"
+
+    # --- LLM (charter D2: keep this behind a provider abstraction, it is a config change) --
+    llm_provider: Literal["fake", "azure", "openai", "bedrock", "mistral"] = "fake"
+    llm_model: str = "gpt-4.1"
+    azure_openai_endpoint: str | None = None
+    azure_openai_api_key: SecretStr | None = None
+    azure_openai_api_version: str = "2024-10-21"
+    openai_api_key: SecretStr | None = None
+    aws_region: str = "eu-north-1"
+    mistral_api_key: SecretStr | None = None
+
+    # --- SMS (step 3) --------------------------------------------------------------------
+    sms_provider: Literal["fake", "46elks"] = "fake"
+    elks_username: str | None = None
+    elks_password: SecretStr | None = None
+    sms_sender_id: str = "Vakans"  # 46elks alphanumeric sender, max 11 chars. Charter D7.
+    founder_mobile: str | None = None  # the "JA-svararen" — the ONE real number we may text
+
+    # --- demo sandbox --------------------------------------------------------------------
+    seed_rng_seed: int = 20260907
+    demo_token: SecretStr | None = None  # guards the destructive /sim/* endpoints
+
+    # --- ingestion -----------------------------------------------------------------------
+    crawl_max_pages: int = 40
+    crawl_max_depth: int = 2
+    crawl_user_agent: str = "VakansBot/0.1 (+https://vakans.se/bot)"
+    crawl_respect_robots: bool = True
+    artifacts_dir: Path = Path("artifacts")
+
+    @field_validator("database_url")
+    @classmethod
+    def _normalise_database_url(cls, v: str) -> str:
+        """Force the async psycopg driver and require SSL for non-local hosts.
+
+        Supabase hands out `postgresql://…`; some tools emit the legacy `postgres://`. Both
+        would otherwise pick a sync/unavailable driver. Forgetting `sslmode=require` against
+        Supabase is a classic twenty-minute loss on demo day, so add it here rather than
+        expecting whoever pastes the URL to remember.
+        """
+        v = re.sub(r"^postgres(ql)?://", "postgresql+psycopg://", v)
+        if not v.startswith("postgresql+psycopg://"):
+            raise ValueError(f"database_url must be a postgresql url, got: {v.split('://')[0]}")
+
+        host_part = v.split("://", 1)[1].split("/", 1)[0]
+        host = host_part.rsplit("@", 1)[-1].split(":", 1)[0]
+        if host not in LOCAL_HOSTS and "sslmode=" not in v:
+            v += ("&" if "?" in v else "?") + "sslmode=require"
+        return v
+
+    @field_validator("sms_sender_id")
+    @classmethod
+    def _check_sender_id(cls, v: str) -> str:
+        # 46elks alphanumeric sender IDs are capped at 11 characters; a longer one is silently
+        # rejected by the carrier, which surfaces as "SMS just never arrived" mid-demo.
+        if len(v) > 11:
+            raise ValueError(f"sms_sender_id must be <= 11 chars for 46elks, got {len(v)}")
+        return v
+
+    @property
+    def sqlalchemy_url(self) -> str:
+        return self.database_url
+
+    @property
+    def alembic_url(self) -> str:
+        return self.database_url
+
+    @property
+    def safe_database_url(self) -> str:
+        """The URL with the password masked. This is the only form safe to log."""
+        return re.sub(r"://([^:/@]+):[^@]*@", r"://\1:***@", self.database_url)
+
+    def url_for_database(self, name: str) -> str:
+        """Same host and credentials, different database. Used to build the test DB URL."""
+        base, _, tail = self.database_url.rpartition("/")
+        query = f"?{tail.split('?', 1)[1]}" if "?" in tail else ""
+        return f"{base}/{name}{query}"
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()

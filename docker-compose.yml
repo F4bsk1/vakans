@@ -1,0 +1,26 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: vakans-db
+    environment:
+      POSTGRES_USER: vakans
+      POSTGRES_PASSWORD: vakans
+      POSTGRES_DB: vakans
+      # timestamptz is absolute so this is not strictly required, but it makes
+      # `make db-shell` output unambiguous instead of rendering in the host's timezone.
+      TZ: UTC
+      PGTZ: UTC
+    command: postgres -c timezone=UTC -c log_min_duration_statement=200
+    ports:
+      # 55432, not 5432 — avoids colliding with any Postgres already on the machine.
+      - "55432:5432"
+    volumes:
+      - vakans_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vakans -d vakans"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  vakans_pgdata:
