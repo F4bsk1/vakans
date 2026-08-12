@@ -50,6 +50,14 @@ src = ["backend", "tests"]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF", "ASYNC", "DTZ"]
 # DTZ is deliberate and non-optional: it bans naive datetime.now()/utcnow(), the exact
 # bug class that silently corrupts a DST-sensitive slot grid. See docs/SCHEMA_NOTES.md.
+ignore = [
+    # Ambiguous-unicode rules. This codebase is full of Swedish prose and typographic ranges
+    # ("mån–fre 08–17"), so these fire constantly on correct text and would train us to stop
+    # reading ruff output.
+    "RUF001",
+    "RUF002",
+    "RUF003",
+]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["E501"]
