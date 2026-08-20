@@ -341,3 +341,38 @@ def test_every_service_is_performable_by_someone() -> None:
     mapped = map_profile(load_demo_profile())
     for si in range(len(mapped.services)):
         assert any(s == si for s, _ in mapped.pairings), f"service {si} has no practitioner"
+
+
+def test_practitioners_are_paired_to_services_they_actually_perform() -> None:
+    """A naprapath offered for physiotherapy is what a clinic owner spots first in a demo.
+
+    Substring matching used to produce exactly that: "Leg. fysioterapeut" is not a substring
+    of "Nybesök fysioterapi", so nobody matched and the fallback assigned everyone.
+    """
+    profile = load_demo_profile()
+    mapped = map_profile(profile)
+    by_service = {
+        mapped.services[si].name: {
+            mapped.resources[ri].name for si2, ri in mapped.pairings if si2 == si
+        }
+        for si in range(len(mapped.services))
+    }
+
+    assert by_service["Nybesök fysioterapi"] == {"Johanna Lindqvist", "Priya Raman"}
+    assert by_service["Nybesök naprapati"] == {"Marcus Ohlsson"}
+    assert by_service["Klassisk massage 60 min"] == {"Erik Sandberg"}
+
+    # The massage therapist must never be offered for a physiotherapy appointment.
+    assert "Erik Sandberg" not in by_service["Nybesök fysioterapi"]
+    assert "Marcus Ohlsson" not in by_service["Nybesök fysioterapi"]
+
+
+def test_stem_matching_pairs_swedish_word_forms() -> None:
+    """ "fysioterapi" and "fysioterapeut" are the same domain but neither prefixes the other."""
+    from app.agent.matching import score_text
+
+    assert score_text("fysioterapi", "Leg. fysioterapeut") > 0
+    assert score_text("naprapati", "Leg. naprapat") > 0
+    assert score_text("massage", "Massageterapeut") > 0
+    # ...but unrelated words that merely start alike must not pair.
+    assert score_text("fysik", "fysio") == 0

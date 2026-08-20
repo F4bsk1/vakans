@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.config import get_settings
-from app.routers import health, sim
+from app.routers import agent, health, sim
 
 logger = logging.getLogger("vakans")
 
@@ -33,6 +33,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.include_router(health.router)
+    app.include_router(agent.router)
     app.include_router(sim.router)
     return app
 

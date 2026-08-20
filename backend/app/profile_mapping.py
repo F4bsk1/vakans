@@ -12,6 +12,7 @@ import re
 from dataclasses import dataclass, field
 from decimal import Decimal
 
+from app.agent.matching import score_text
 from app.models import ResourceKind
 from app.schemas.clinic_profile import ClinicProfile, ServiceItem, StaffMember
 
@@ -39,6 +40,10 @@ NEW_VISIT_PATTERN = re.compile(r"\b(nybesök|nybesok|första besöket|forsta bes
 
 # A calendar with more than four columns is unreadable on a demo screen.
 MAX_PRACTITIONERS = 4
+
+# Low enough that one shared domain word pairs a practitioner to a service, high enough
+# that "Nybesök naprapati" does not reach a physiotherapist.
+SPECIALTY_MATCH_FLOOR = 0.25
 
 
 @dataclass(frozen=True)
@@ -90,13 +95,16 @@ def _normalise(text: str) -> str:
 
 
 def _matches_specialty(service: ServiceItem, staff: StaffMember) -> bool:
-    """Loose keyword overlap between a service and a practitioner's stated specialties."""
-    haystack = _normalise(f"{service.name} {service.category or ''}")
-    for specialty in (*staff.specialties, staff.title or ""):
-        token = _normalise(specialty)
-        if len(token) >= 4 and token in haystack:
-            return True
-    return False
+    """Can this practitioner plausibly perform this service?
+
+    Token overlap with stem matching, not substring containment. A naprapath being offered for
+    "Nybesök fysioterapi" is the kind of error a clinic owner spots instantly in a demo, and
+    substring matching produced exactly that: "Leg. fysioterapeut" is not a substring of
+    "Nybesök fysioterapi", so nobody matched and the fallback assigned everyone to everything.
+    """
+    spoken = f"{service.name} {service.category or ''}"
+    described = " ".join([staff.title or "", *staff.specialties])
+    return score_text(spoken, described) >= SPECIALTY_MATCH_FLOOR
 
 
 def map_profile(
