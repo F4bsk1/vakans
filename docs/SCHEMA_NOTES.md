@@ -5,17 +5,22 @@ starting point and is followed table-for-table. This file records the **eight ad
 in `backend/app/models.py` / migration `0001_canonical_schema`, plus what we deliberately did
 *not* build.
 
-Nothing here removes or renames a spec column. Every delta is additive, so the spec DDL remains
-a truthful description of the model.
+Nothing here removes or renames a spec column. Every delta is additive.
 
-**Review this list before step 3.** It is the one set of decisions that is expensive to revisit
-once the agent endpoints and refill engine are written on top.
+**Status: reviewed and settled, 2026-08-20.** Spec §2 has been updated to describe the model we
+actually build, so it is no longer a trap for whoever writes step 3. Treat this file as a
+frozen decision log — record *new* schema changes in their migration docstring, not here.
+
+Seven of the eight deltas are marked **forced**: the spec asks for behaviour that is impossible
+without them, so there was nothing to decide. Don't spend time re-litigating those. The one real
+judgement call was G5, and its consequence is recorded under
+[Known simplifications](#known-simplifications).
 
 ---
 
 ## The eight deltas
 
-### G1 — Nothing prevented double-booking a slot
+### G1 — Nothing prevented double-booking a slot  ·  *forced*
 `bookings.slot_id` had no uniqueness constraint. Two concurrent writes — the voice agent
 booking a slot while an inbound refill "JA" claims the same one — would both read
 `slot.status='open'` and both insert. The dashboard would then show two patients in one slot.
@@ -31,7 +36,7 @@ transaction, turning the exception path into a clean lock.
 
 Tested: `test_double_booking_is_rejected`, `test_cancelled_booking_frees_the_slot_again`.
 
-### G2 — `booking_ref` was used by the API but defined nowhere
+### G2 — `booking_ref` was used by the API but defined nowhere  ·  *forced*
 Spec §3's `/agent/reschedule` and `/agent/cancel` both take a `booking_ref`, but §2 has no such
 column. Seeded bookings need one too, because the demo caller phones about a booking the seed
 created.
@@ -44,7 +49,7 @@ Note that prompt rule 4 in spec §4 requires the agent to ask for name + phone b
 an existing booking, so the *primary* lookup in step 3 is `(clinic_id, patient.phone, status)`
 — indexed — and `booking_ref` is the reference the patient reads back off their SMS.
 
-### G3 — The refill cascade had nowhere to live
+### G3 — The refill cascade had nowhere to live  ·  *forced (shape was a judgement call)*
 Spec §2's `waitlist` holds only preferences. The engine in §3 needs to know which candidates
 were offered, in what order, when the 90 s timeout expires, and which offer an inbound "JA"
 belongs to.
@@ -55,7 +60,7 @@ belongs to.
   `cascade_id` groups a whole cascade and doubles as the `correlation_id` the dashboard
   timeline groups on. `unique (cascade_id, candidate_n)`.
 
-### G4 — No SMS storage at all
+### G4 — No SMS storage at all  ·  *forced*
 Spec §3 has 46elks send + inbound webhook and §6 has an `sms_sent` event, but §2 stores
 nothing. Events alone are insufficient: **46elks retries inbound webhooks**, so we need an
 idempotency key, and an inbound "JA" must resolve to a live offer.
@@ -64,7 +69,7 @@ New table `sms_messages` with a partial unique index on `(provider, provider_mes
 Only `sms_messages.refill_offer_id` exists, not the reverse pointer, so the two tables stay
 acyclic and Alembic doesn't need `use_alter`.
 
-### G5 — The risk heuristic's inputs were not columns
+### G5 — The risk heuristic's inputs were not columns  ·  *judgement call — see below*
 Spec §5's formula needs "ny patient" and "tidigare no-show". `patients` had neither, so
 `risk.py` could not be fed from the database and the seed could not produce a believable
 red/yellow/green spread for the step-6 risk panel.
@@ -76,13 +81,13 @@ red/yellow/green spread for the step-6 risk panel.
 - `bookings.booked_at` as the business timestamp the lead-time term reads. `created_at` stays
   row-creation, so a reschedule doesn't silently reset the ">21 days ahead" signal.
 
-### G6 — `slots.status` had no `held`
+### G6 — `slots.status` had no `held`  ·  *forced*
 During the 90 s SMS offer window the slot must be reserved, or the voice agent can book it out
 from under a running cascade — which is exactly the moment the demo is built around. Defining
 the enum as `open | booked | blocked | held` now costs nothing; changing a CHECK constraint
 later is a real migration.
 
-### G7 — `clinics` lacked identity and locale fields
+### G7 — `clinics` lacked identity and locale fields  ·  *forced*
 Added `slug` (unique; the CLI, artifacts dir and dashboard route all want one), `timezone`
 (defaulting to Europe/Stockholm — never hardcode it in a path that may one day serve a Finnish
 clinic), `sms_sender_id`, `profile_reviewed_at` / `profile_reviewed_by`, `seeded_at`,
@@ -92,7 +97,7 @@ clinic), `sms_sender_id`, `profile_reviewed_at` / `profile_reviewed_by`, `seeded
 a recommendation into something enforced. `/sim/reset` returns **409** for an
 ingestion-sourced profile that no human has approved.
 
-### G8 — No delete behaviour, and `service_resources` couldn't be scoped
+### G8 — No delete behaviour, and `service_resources` couldn't be scoped  ·  *forced*
 `ondelete="CASCADE"` on every `clinic_id` FK, so deleting a demo clinic is one statement — which
 also makes "we delete everything on request" demonstrably true when a clinic owner asks.
 
@@ -117,6 +122,37 @@ added. Tested: `test_deleting_a_clinic_cascades`.
 - `slots` CHECK `ends_at > starts_at`, and `patients` CHECK `noshow_risk between 0 and 1`.
 - `MetaData(naming_convention=...)`. Six lines. Without it, Alembic autogenerate emits unnamed
   constraints and every future migration becomes a diff-noise fight.
+
+---
+
+## Known simplifications
+
+Things the model gets deliberately wrong, accepted with open eyes.
+
+### One phone number = one patient (from G5)
+
+`unique (clinic_id, phone)` encodes a claim that is **false in the real world**: that a mobile
+number identifies a person. In practice a parent books physio for two children on one number,
+and couples share a phone — common in exactly the clinic types we are selling to. Under this
+constraint both bookings attach to a single patient row, so the calendar shows one name for two
+different people.
+
+**Decided 2026-08-20: keep it for the demo and the pilot conversation.**
+
+- It makes **no** difference to the demo: every fabricated patient has a unique number.
+- Without it, the "ny patient" term in the §5 risk heuristic is meaningless, because
+  `/agent/book` would create a new patient on every call from the same number.
+- Relaxing it now costs a migration and makes step 3's patient lookup ambiguous.
+
+**When to fix it:** the first pilot that handles real patients. The fix is natural rather than
+disruptive, because prompt rule 4 (spec §4) *already* requires the agent to ask for name **and**
+phone before touching an existing booking — so the disambiguation conversation exists already.
+Likely shape: relax to a lookup on `(clinic_id, phone)` returning many, then match on name, and
+drop the unique index in favour of a non-unique one.
+
+Do not let this reach a customer conversation as a surprise. If a clinic owner asks how we
+handle families, the honest answer is "in the pilot we key on phone plus name — the demo
+simplifies it".
 
 ---
 
