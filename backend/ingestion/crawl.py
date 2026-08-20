@@ -73,6 +73,10 @@ NON_HTML_SUFFIXES = (
 )
 TRACKING_PARAMS = re.compile(r"^(utm_|fbclid|gclid|mc_cid|mc_eid|_ga)", re.I)
 
+# A news post sitting at the root, not under /blogg. WordPress does this by default, and
+# "Nya patientavgifter 2023" then scores as high as the real price list.
+YEAR_IN_SLUG = re.compile(r"\b(19|20)\d{2}\b")
+
 SITEMAP_CANDIDATES = (
     "/sitemap.xml",
     "/sitemap_index.xml",
@@ -91,6 +95,25 @@ class CrawlConfig:
     user_agent: str = "VakansBot/0.1"
     concurrency: int = 3
     min_words: int = 20  # below this a "page" is a nav shell, not content
+    # Restrict the crawl to a path subtree. Set automatically when the supplied URL has a
+    # path — see `path_prefix_for`. Chains put every location on one domain, so without this
+    # a crawl of one clinic silently returns the whole group.
+    path_prefix: str | None = None
+
+
+# Non-production hosts that leak into sitemaps and internal links. Crawling one produces a
+# profile built from staging content — plausible-looking and wrong.
+NON_PROD_HOST = re.compile(r"^(test|testing|staging|stage|dev|preview|beta|old|www2)\.", re.I)
+
+
+def path_prefix_for(base_url: str) -> str | None:
+    """The subtree a crawl should stay inside, or None for a whole-domain crawl.
+
+    `https://klinik.se/` -> None (single-site clinic, crawl everything).
+    `https://famlak.se/saltsjobaden/` -> `/saltsjobaden` (one location of a chain).
+    """
+    path = urlparse(base_url).path.rstrip("/")
+    return path or None
 
 
 @dataclass(frozen=True)
@@ -159,11 +182,23 @@ def normalize_url(url: str, base: str) -> str | None:
 
 
 def same_site(url: str, base: str, *, include_subdomains: bool = True) -> bool:
-    a, b = urlparse(url).netloc.lower(), urlparse(base).netloc.lower()
-    a, b = a.removeprefix("www."), b.removeprefix("www.")
+    a_host, b_host = urlparse(url).netloc.lower(), urlparse(base).netloc.lower()
+    # A staging host is same-domain but wrong-content: crawling it yields a plausible profile
+    # built from test data.
+    if NON_PROD_HOST.match(a_host) and not NON_PROD_HOST.match(b_host):
+        return False
+    a, b = a_host.removeprefix("www."), b_host.removeprefix("www.")
     if a == b:
         return True
     return include_subdomains and (a.endswith(f".{b}") or b.endswith(f".{a}"))
+
+
+def within_prefix(url: str, prefix: str | None) -> bool:
+    """Is this URL inside the clinic's subtree? Always true when there is no prefix."""
+    if not prefix:
+        return True
+    path = urlparse(url).path.rstrip("/")
+    return path == prefix or path.startswith(prefix + "/")
 
 
 def url_priority(url: str, base: str) -> int:
@@ -173,12 +208,31 @@ def url_priority(url: str, base: str) -> int:
 
     if EXCLUDE_PATTERN.search(path):
         return 0
-    if path == "/" and same_site(url, base):
+    # The clinic's landing page. For a chain that is the subtree root (/saltsjobaden), not the
+    # domain root — and it is usually the page carrying the phone number and opening hours.
+    base_path = urlparse(base).path.rstrip("/") or "/"
+    if same_site(url, base) and path.rstrip("/") in ("", base_path):
         return HOMEPAGE_PRIORITY
+    if _looks_like_a_news_post(path):
+        return DEFAULT_PRIORITY
     for score, pattern in PRIORITY_RULES:
         if pattern.search(path):
             return score
     return DEFAULT_PRIORITY
+
+
+def _looks_like_a_news_post(path: str) -> bool:
+    """Root-level slug that reads like an article rather than a section.
+
+    Real section pages are short and shallow ("/priser", "/om-oss/priser"). A dated headline
+    flattened into a slug — "nya-patientavgifter-2023-i-region-stockholm" — is a post, and it
+    should not outrank the price list just because it contains "avgift".
+    """
+    segments = [s for s in path.split("/") if s]
+    if len(segments) != 1:
+        return False  # nested pages are section content, not root-level posts
+    slug = segments[0]
+    return bool(YEAR_IN_SLUG.search(slug)) or slug.count("-") >= 3
 
 
 def is_pdf(url: str) -> bool:
@@ -351,6 +405,9 @@ async def crawl(base_url: str, fetcher: Fetcher, cfg: CrawlConfig) -> CrawlResul
             normalized, base_url, include_subdomains=cfg.include_subdomains
         ):
             skipped.append((normalized, "off-domain"))
+            return
+        if not within_prefix(normalized, cfg.path_prefix):
+            skipped.append((normalized, "outside-clinic-subtree"))
             return
         if not allowed(normalized):
             skipped.append((normalized, "robots"))

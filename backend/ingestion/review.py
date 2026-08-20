@@ -37,6 +37,7 @@ from app.seed import SeedConfig, seed_clinic
 from app.timeutils import now_utc
 from ingestion import artifacts
 from ingestion.crawl import crawl as run_crawl
+from ingestion.crawl import path_prefix_for as run_crawl_prefix
 from ingestion.detect import detect_booking_system
 from ingestion.extract import EXTRACTION_PROMPT, PartialProfile, extract_profile
 from ingestion.fetchers import (
@@ -78,8 +79,15 @@ def crawl(
     settings = get_settings()
     slug = slug or _slug_from_url(url)
     cfg = artifacts.crawl_config_from_settings(settings)
+    overrides: dict = {}
     if max_pages:
-        cfg = type(cfg)(**{**cfg.__dict__, "max_pages": max_pages})
+        overrides["max_pages"] = max_pages
+    # A chain puts every location on one domain, so a URL with a path means "this clinic",
+    # not "this company".
+    if (prefix := run_crawl_prefix(url)) is not None:
+        overrides["path_prefix"] = prefix
+        console.print(f"Begränsar crawlen till [cyan]{prefix}/[/] (klinik i en kedja)")
+    cfg = type(cfg)(**{**cfg.__dict__, **overrides})
 
     async def _run() -> None:
         http = HttpxFetcher(user_agent=settings.crawl_user_agent)

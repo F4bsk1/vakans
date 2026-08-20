@@ -296,3 +296,100 @@ async def test_fetch_errors_are_recorded_not_raised() -> None:
     result = await crawl(BASE, fetcher, CFG)
     assert result.pages  # the homepage still came back
     assert any("/finns-inte" in url for url, _ in result.skipped)
+
+
+# --- multi-location chains ---------------------------------------------------------------------
+# Found by crawling a real site: famlak.se hosts every Familjeläkarna location on one domain,
+# so a crawl of /saltsjobaden/ returned Husby's and Vaxholm's fees too. Only 4 of 40 pages were
+# the clinic we asked for. Blending six clinics' prices into one profile is worse than a wrong
+# price — it is a different clinic's price.
+
+CHAIN = "https://kedjan.example"
+
+
+def test_path_prefix_is_derived_from_the_url() -> None:
+    from ingestion.crawl import path_prefix_for
+
+    assert path_prefix_for("https://klinik.example/") is None
+    assert path_prefix_for("https://klinik.example") is None
+    assert path_prefix_for(f"{CHAIN}/saltsjobaden/") == "/saltsjobaden"
+    assert path_prefix_for(f"{CHAIN}/saltsjobaden") == "/saltsjobaden"
+
+
+def test_within_prefix_keeps_siblings_out() -> None:
+    from ingestion.crawl import within_prefix
+
+    assert within_prefix(f"{CHAIN}/saltsjobaden", "/saltsjobaden")
+    assert within_prefix(f"{CHAIN}/saltsjobaden/priser", "/saltsjobaden")
+    assert not within_prefix(f"{CHAIN}/husby/priser", "/saltsjobaden")
+    # A sibling whose name merely starts the same must not slip through.
+    assert not within_prefix(f"{CHAIN}/saltsjobaden-gamla/priser", "/saltsjobaden")
+    # No prefix means a single-site clinic: crawl the whole domain.
+    assert within_prefix(f"{CHAIN}/anything", None)
+
+
+async def test_crawl_stays_inside_one_location_of_a_chain() -> None:
+    fetcher = build(
+        {
+            f"{CHAIN}/saltsjobaden": page(
+                "Saltsjöbaden",
+                "Vår mottagning",
+                links=("/saltsjobaden/priser", "/husby/priser", "/vaxholm"),
+            ),
+            f"{CHAIN}/saltsjobaden/priser": page("Priser", "Nybesök 300 kr"),
+            f"{CHAIN}/husby/priser": page("Husby priser", "Nybesök 250 kr"),
+            f"{CHAIN}/vaxholm": page("Vaxholm", "En annan mottagning"),
+        }
+    )
+    result = await crawl(
+        f"{CHAIN}/saltsjobaden",
+        fetcher,
+        CrawlConfig(user_agent="VakansBot/0.1", path_prefix="/saltsjobaden"),
+    )
+    urls = {p.url for p in result.pages}
+
+    assert f"{CHAIN}/saltsjobaden/priser" in urls
+    assert f"{CHAIN}/husby/priser" not in urls
+    assert f"{CHAIN}/vaxholm" not in urls
+    assert any(reason == "outside-clinic-subtree" for _, reason in result.skipped)
+
+
+def test_the_subtree_root_is_the_clinic_homepage() -> None:
+    """It carries the phone number and opening hours; it must not score as a stray page."""
+    assert url_priority(f"{CHAIN}/saltsjobaden", f"{CHAIN}/saltsjobaden/") == 95
+    assert url_priority(f"{BASE}/", BASE) == 95
+
+
+# --- staging hosts and news posts ----------------------------------------------------------------
+
+
+def test_staging_hosts_are_not_crawled() -> None:
+    """test.famlak.se appeared in the real sitemap. A profile built from staging content is
+    plausible and wrong."""
+    assert not same_site("https://test.klinik.example/priser", BASE)
+    assert not same_site("https://staging.klinik.example/priser", BASE)
+    assert not same_site("https://dev.klinik.example/priser", BASE)
+    # Unless the site under test *is* the staging host, which is a legitimate thing to crawl.
+    assert same_site("https://test.klinik.example/priser", "https://test.klinik.example")
+
+
+@pytest.mark.parametrize(
+    "slug",
+    [
+        "nya-patientavgifter-2023-i-region-stockholm",
+        "forandring-patientavgift-2017",
+        "hojd-avgift-for-uteblivet-besok",
+        "kostnadsfri-vaccinering-av-gardasil-for-kvinnor-upp-till-27-ar",
+    ],
+)
+def test_root_level_news_posts_do_not_outrank_the_price_list(slug: str) -> None:
+    """All four are real famlak.se URLs that scored 100 — as high as the actual fee page —
+    because the headline contains "avgift"."""
+    assert url_priority(f"{BASE}/{slug}", BASE) == 10
+
+
+def test_real_section_pages_keep_their_priority() -> None:
+    """The demotion must not catch genuine price pages with hyphenated names."""
+    assert url_priority(f"{BASE}/saltsjobaden/familjelakarnas-besoksavgifter", BASE) == 100
+    assert url_priority(f"{BASE}/prislista", BASE) == 100
+    assert url_priority(f"{BASE}/om-oss", BASE) == 80
