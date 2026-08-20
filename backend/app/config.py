@@ -66,6 +66,16 @@ class Settings(BaseSettings):
     # --- demo sandbox --------------------------------------------------------------------
     seed_rng_seed: int = 20260907
     demo_token: SecretStr | None = None  # guards the destructive /sim/* endpoints
+    # Guards /agent/*. Required outside tests: these endpoints are reached through a public
+    # tunnel so the voice platform can call them, and unauthenticated they let anyone who
+    # finds the URL book or cancel appointments.
+    agent_token: SecretStr | None = None
+
+    # --- voice (charter D1: ElevenLabs Agents) --------------------------------------------
+    elevenlabs_api_key: SecretStr | None = None
+    elevenlabs_agent_id: str | None = None
+    # Where the voice platform reaches this API. The tunnel URL in development.
+    public_base_url: str = "http://localhost:8000"
 
     # --- ingestion -----------------------------------------------------------------------
     crawl_max_pages: int = 40

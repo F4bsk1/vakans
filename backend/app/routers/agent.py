@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,10 +34,39 @@ from app.schemas.agent import (
 from app.schemas.clinic_profile import ClinicProfile
 from app.timeutils import now_utc
 
-router = APIRouter(prefix="/agent", tags=["agent"])
-
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
+
+
+async def require_agent_token(
+    x_agent_token: Annotated[str | None, Header()] = None,
+    settings: Annotated[Settings, Depends(get_settings)] = None,  # type: ignore[assignment]
+) -> None:
+    """Shared secret between the voice platform and this API.
+
+    **Fail-closed, unlike /sim.** These endpoints are reached through a public tunnel so
+    ElevenLabs' servers can call them, which means an unauthenticated deployment lets anyone
+    who discovers the URL read a clinic's calendar and cancel real appointments. `/sim` can
+    afford to skip the check on localhost; this cannot, because "localhost" and "exposed to
+    the internet" are the same machine the moment a tunnel is running.
+
+    Configure it as a header on each ElevenLabs webhook tool — see `app.voice.elevenlabs`.
+    """
+    if settings.env == "test":
+        return
+    if settings.agent_token is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(
+                "VAKANS_AGENT_TOKEN is not set. Generate one with `openssl rand -hex 32` and "
+                "put it in .env — /agent/* is reachable from the internet whenever a tunnel is up."
+            ),
+        )
+    if x_agent_token != settings.agent_token.get_secret_value():
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="bad agent token")
+
+
+router = APIRouter(prefix="/agent", tags=["agent"], dependencies=[Depends(require_agent_token)])
 
 
 async def _clinic(session: AsyncSession, clinic_id: UUID) -> Clinic:

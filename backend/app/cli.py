@@ -15,13 +15,16 @@ from rich.console import Console
 from rich.table import Table
 from sqlalchemy import delete, select
 
+from app.agent.prompt import build_greeting, build_system_prompt
 from app.config import get_settings
 from app.db import unit_of_work
 from app.events import EventType, emit
 from app.fixtures import load_demo_profile_document
 from app.models import CLINIC_SCOPED_DELETE_ORDER, Clinic
+from app.schemas.clinic_profile import ClinicProfile
 from app.seed import SeedConfig, seed_clinic
 from app.timeutils import now_utc
+from app.voice import elevenlabs
 
 app = typer.Typer(help="Vakans sandbox operations", no_args_is_help=True)
 console = Console()
@@ -138,6 +141,67 @@ def list_clinics() -> None:
                     else "-",
                 )
             console.print(table)
+
+    asyncio.run(_run())
+
+
+@app.command()
+def voice(
+    slug: str = typer.Option(DEMO_SLUG, help="Clinic to generate the agent config for."),
+    base_url: str = typer.Option(None, help="Public URL ElevenLabs will call. Defaults to config."),
+) -> None:
+    """Write the ElevenLabs agent config: greeting, system prompt and the seven webhook tools."""
+
+    async def _run() -> None:
+        settings = get_settings()
+        public = base_url or settings.public_base_url
+        async with unit_of_work() as session:
+            clinic = (
+                await session.execute(select(Clinic).where(Clinic.slug == slug))
+            ).scalar_one_or_none()
+            if clinic is None:
+                console.print(
+                    f"[red]No clinic '{slug}'.[/] Run `make seed` or `vakans-review load`."
+                )
+                raise typer.Exit(1)
+
+            profile = ClinicProfile.model_validate(clinic.profile["profile"])
+            out_dir = settings.artifacts_dir / slug
+            out_dir.mkdir(parents=True, exist_ok=True)
+
+            prompt_path = out_dir / "elevenlabs-agent.md"
+            prompt_path.write_text(
+                f"# ElevenLabs agent — {clinic.name}\n\n"
+                f"clinic_id: {clinic.id}\nLanguage: Swedish   TTS: Flash v2.5\n\n"
+                f"## First message\n\n{build_greeting(profile)}\n\n"
+                f"## System prompt\n\n{build_system_prompt(profile)}\n",
+                encoding="utf-8",
+            )
+            tools_path = out_dir / "elevenlabs-tools.md"
+            tools_path.write_text(
+                elevenlabs.as_markdown(
+                    base_url=public, clinic_id=clinic.id, clinic_name=clinic.name
+                ),
+                encoding="utf-8",
+            )
+            json_path = out_dir / "elevenlabs-tools.json"
+            json_path.write_text(
+                elevenlabs.as_json(base_url=public, clinic_id=clinic.id), encoding="utf-8"
+            )
+
+            console.print(f"[green]Agent config[/] -> {prompt_path}")
+            console.print(f"[green]Tool setup sheet[/] -> {tools_path}")
+            console.print(f"[green]Tool JSON[/] -> {json_path}")
+            if public.startswith("http://localhost"):
+                console.print(
+                    "\n[yellow]VAKANS_PUBLIC_BASE_URL is still localhost.[/] ElevenLabs cannot "
+                    "reach that — start a tunnel and re-run with the public URL."
+                )
+            if settings.agent_token is None:
+                console.print(
+                    "[yellow]VAKANS_AGENT_TOKEN is not set.[/] /agent/* will refuse every "
+                    "request until it is. Generate one: openssl rand -hex 32"
+                )
 
     asyncio.run(_run())
 
