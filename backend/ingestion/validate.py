@@ -111,7 +111,10 @@ def validate_profile(doc: ClinicProfileDocument, crawl: CrawlResult | None = Non
     for service in profile.services:
         if service.price_sek is None:
             continue
-        if service.price_sek < MIN_PLAUSIBLE_PRICE:
+        # Exactly 0 is a real Swedish price, not a parsing error: primary care is free for
+        # under-18s and over-85s, and BVC is free for everyone. Flagging it taught the
+        # reviewer to skim past warnings, which is how a genuine one gets missed.
+        if 0 < service.price_sek < MIN_PLAUSIBLE_PRICE:
             warn(
                 "price_implausibly_low",
                 f"'{service.name}' {service.price_sek} kr — kan vara feltolkat "

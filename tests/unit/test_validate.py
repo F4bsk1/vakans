@@ -312,3 +312,33 @@ def test_reviewed_at_roundtrips_through_the_artifact(artifact_dir: Path) -> None
     doc.meta.reviewed_by = "Fabian"
     art.save_profile(artifact_dir, "klinik", doc)
     assert art.load_profile(artifact_dir, "klinik").meta.reviewed_by == "Fabian"
+
+
+def test_free_care_is_not_flagged_as_a_parsing_error() -> None:
+    """Found on the first real extraction: Familjeläkarna lists 0 kr for under-18s and 85+,
+    which is correct Swedish primary care, not "1 195" misread as 1. Flagging it teaches the
+    reviewer to skim past warnings — which is how a genuine one gets missed."""
+    profile = _good_profile(
+        services=[
+            ServiceItem(
+                name="Läkarvård - barn under 18 år",
+                price_sek=0,
+                price_evidence="0 kr",
+                price_source_url=URL,
+            )
+        ]
+    )
+    issues = validate_profile(_doc(profile), _crawl_with_name())
+    assert "price_implausibly_low" not in {i.code for i in warnings(issues)}
+
+
+def test_a_genuinely_suspicious_price_still_warns() -> None:
+    profile = _good_profile(
+        services=[
+            ServiceItem(
+                name="Nybesök", price_sek=1, price_evidence="1 195 kr", price_source_url=URL
+            )
+        ]
+    )
+    issues = validate_profile(_doc(profile), _crawl_with_name())
+    assert "price_implausibly_low" in {i.code for i in warnings(issues)}
