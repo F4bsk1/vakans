@@ -43,12 +43,16 @@ class Settings(BaseSettings):
     default_timezone: str = "Europe/Stockholm"
 
     # --- LLM (charter D2: keep this behind a provider abstraction, it is a config change) --
-    llm_provider: Literal["fake", "azure", "openai", "bedrock", "mistral"] = "fake"
+    # Ingestion extraction only. This is offline batch work over *public* clinic web pages,
+    # not patient data, so the provider choice here is not the EU-posture decision — that one
+    # lives on the voice path (charter §2, D1).
+    llm_provider: Literal["fake", "azure", "openai", "anthropic", "bedrock", "mistral"] = "fake"
     llm_model: str = "gpt-4.1"
     azure_openai_endpoint: str | None = None
     azure_openai_api_key: SecretStr | None = None
     azure_openai_api_version: str = "2024-10-21"
     openai_api_key: SecretStr | None = None
+    anthropic_api_key: SecretStr | None = None
     aws_region: str = "eu-north-1"
     mistral_api_key: SecretStr | None = None
 

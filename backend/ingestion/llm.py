@@ -101,6 +101,17 @@ def build_model(settings: Settings) -> object:
             raise RuntimeError("VAKANS_LLM_PROVIDER=openai needs VAKANS_OPENAI_API_KEY")
         return OpenAIChatModel(settings.llm_model)
 
+    if provider == "anthropic":
+        from pydantic_ai.models.anthropic import AnthropicModel
+        from pydantic_ai.providers.anthropic import AnthropicProvider
+
+        if not settings.anthropic_api_key:
+            raise RuntimeError("VAKANS_LLM_PROVIDER=anthropic needs VAKANS_ANTHROPIC_API_KEY")
+        return AnthropicModel(
+            settings.llm_model,
+            provider=AnthropicProvider(api_key=settings.anthropic_api_key.get_secret_value()),
+        )
+
     if provider == "bedrock":
         from pydantic_ai.models.bedrock import BedrockConverseModel
 
