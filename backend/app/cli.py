@@ -18,12 +18,12 @@ from sqlalchemy import delete, select
 from app.agent.prompt import build_greeting, build_system_prompt
 from app.config import get_settings
 from app.db import unit_of_work
-from app.events import EventType, emit
+from app.events import EventType, emit, recent_events
 from app.fixtures import load_demo_profile_document
-from app.models import CLINIC_SCOPED_DELETE_ORDER, Clinic
+from app.models import CLINIC_SCOPED_DELETE_ORDER, Booking, Clinic, Patient, Service, Slot
 from app.schemas.clinic_profile import ClinicProfile
 from app.seed import SeedConfig, seed_clinic
-from app.timeutils import now_utc
+from app.timeutils import get_tz, now_utc
 from app.voice import elevenlabs
 
 app = typer.Typer(help="Vakans sandbox operations", no_args_is_help=True)
@@ -202,6 +202,103 @@ def voice(
                     "[yellow]VAKANS_AGENT_TOKEN is not set.[/] /agent/* will refuse every "
                     "request until it is. Generate one: openssl rand -hex 32"
                 )
+
+    asyncio.run(_run())
+
+
+@app.command()
+def events(
+    slug: str = typer.Option(DEMO_SLUG, help="Clinic to show activity for."),
+    limit: int = typer.Option(20, help="How many recent events."),
+) -> None:
+    """Show what actually happened, from the events table.
+
+    The audit log is the only unfakeable record of a call: the agent can *say* it booked
+    something using nothing but its system prompt, but only a real tool call writes a row here.
+    """
+
+    async def _run() -> None:
+        async with unit_of_work() as session:
+            clinic = (
+                await session.execute(select(Clinic).where(Clinic.slug == slug))
+            ).scalar_one_or_none()
+            if clinic is None:
+                console.print(f"[red]No clinic '{slug}'.[/]")
+                raise typer.Exit(1)
+
+            rows = await recent_events(session, clinic.id, limit=limit)
+            if not rows:
+                console.print("[yellow]No events yet.[/] Nothing has called a tool.")
+                return
+
+            table = Table("when", "event", "who", "detail")
+            for e in rows:
+                payload = e.payload or {}
+                detail = (
+                    payload.get("booking_ref")
+                    or payload.get("reason")
+                    or payload.get("service")
+                    or ", ".join(f"{k}={v}" for k, v in list(payload.items())[:2])
+                )
+                table.add_row(
+                    e.ts.astimezone(get_tz(clinic.timezone)).strftime("%H:%M:%S"),
+                    e.type,
+                    e.actor or "-",
+                    str(detail)[:58],
+                )
+            console.print(table)
+
+    asyncio.run(_run())
+
+
+@app.command()
+def bookings(
+    slug: str = typer.Option(DEMO_SLUG, help="Clinic to inspect."),
+    via: str = typer.Option("voice", help="booked_via filter: voice, refill, seed, or all."),
+) -> None:
+    """List bookings, defaulting to the ones an agent made.
+
+    Use this to verify a booking reference the agent read out loud actually exists.
+    """
+
+    async def _run() -> None:
+        async with unit_of_work() as session:
+            clinic = (
+                await session.execute(select(Clinic).where(Clinic.slug == slug))
+            ).scalar_one_or_none()
+            if clinic is None:
+                console.print(f"[red]No clinic '{slug}'.[/]")
+                raise typer.Exit(1)
+
+            stmt = (
+                select(Booking, Slot, Patient, Service)
+                .join(Slot, Booking.slot_id == Slot.id)
+                .join(Patient, Booking.patient_id == Patient.id)
+                .join(Service, Booking.service_id == Service.id)
+                .where(Booking.clinic_id == clinic.id)
+                .order_by(Booking.created_at.desc())
+                .limit(20)
+            )
+            if via != "all":
+                stmt = stmt.where(Booking.booked_via == via)
+
+            rows = (await session.execute(stmt)).all()
+            if not rows:
+                console.print(f"[yellow]No bookings with booked_via={via}.[/]")
+                return
+
+            tz = get_tz(clinic.timezone)
+            table = Table("ref", "when", "service", "patient", "phone", "risk")
+            for b, s, p, svc in rows:
+                table.add_row(
+                    b.booking_ref,
+                    s.starts_at.astimezone(tz).strftime("%a %d %b %H:%M"),
+                    svc.name[:24],
+                    (p.name or "-")[:20],
+                    p.phone or "-",
+                    f"{float(b.risk):.2f}" if b.risk is not None else "-",
+                )
+            console.print(table)
 
     asyncio.run(_run())
 
