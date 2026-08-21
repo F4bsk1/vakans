@@ -107,6 +107,41 @@ What we do about our segment:
 Through the tunnel, a tool call currently returns in well under 100 ms. In production the tunnel
 hop disappears.
 
+## The refill cascade
+
+The second half of step 3, and the only part of the system that acts without a human or an LLM
+in the loop.
+
+```
+cancel (voice, or /sim/cancel_random)
+   │  same transaction
+   ├─► booking -> cancelled, slot -> held      (not open — see below)
+   ├─► events: booking_cancelled, slot_freed   (dashboard: slot blinks red, SEK at risk)
+   └─► refill_offers row #1 + a queued SMS
+
+        ┌── refill worker, every 5 s ──┐
+        │  deliver queued SMS          │
+        │  expire offers past 90 s     │──► offer #2, #3, … until someone says yes
+        └──────────────────────────────┘
+
+"JA" (46elks webhook, or /sim/waitlist_reply)
+   └─► booking booked_via=refill, slot -> booked, events: slot_refilled {sek_value}
+```
+
+Three decisions inside that are easy to get wrong:
+
+- **The slot is `held`, not `open`, while a cascade runs.** Otherwise the voice agent books it
+  away from someone who was just promised ninety seconds to answer. `availability` only returns
+  `open` slots and `book` refuses everything else, so the two paths cannot collide.
+- **The timeout is swept, not slept.** No `asyncio.sleep(90)` holds a cascade in memory; offers
+  carry `expires_at` and the worker advances whatever is due. Restarting the API mid-demo
+  resumes correctly instead of stranding a held slot forever.
+- **SMS is an outbox.** `send_sms` writes a `queued` row and returns; the worker delivers it.
+  Cancelling during a live call therefore costs one local transaction rather than an HTTP round
+  trip to a Swedish carrier — the same 1.5-second budget the tools live under.
+
+`vakans cascade --slug demo` shows who was texted, in what order, and how it went.
+
 ## Data residency (charter §2)
 
 | Data | Where it lives | Posture |

@@ -306,18 +306,27 @@ async def test_cancel_frees_the_slot_and_signals_the_refill_engine(
     )
 
     cancelled = await tools.cancel(
-        db_session, clinic, booking_ref=booked.data["booking_ref"], phone=CALLER, now=NOW
+        db_session,
+        clinic,
+        booking_ref=booked.data["booking_ref"],
+        phone=CALLER,
+        settings=agent_settings,
+        now=NOW,
     )
     assert cancelled.data["cancelled"] is True
     assert "avbokad" in cancelled.speech
 
     await db_session.refresh(slot)
-    assert slot.status is SlotStatus.OPEN
+    # `held`, not `open`: cancelling starts a refill cascade in the same transaction, and the
+    # slot is reserved for whoever was texted. It falls back to `open` when the cascade is
+    # exhausted. See app/refill/engine.py and schema delta G6.
+    assert slot.status is SlotStatus.HELD
+    assert cancelled.data["refill"] == "offered"
 
     types = [e.type for e in await recent_events(db_session, clinic.id)]
     assert "booking_cancelled" in types
-    # Step 3b's cascade hangs off this one.
     assert "slot_freed" in types
+    assert "refill_sms_sent" in types
 
 
 async def test_cancel_refuses_when_the_phone_does_not_match_the_reference(
@@ -342,6 +351,7 @@ async def test_cancel_refuses_when_the_phone_does_not_match_the_reference(
         clinic,
         booking_ref=booked.data["booking_ref"],
         phone="070-000 00 00",
+        settings=agent_settings,
         now=NOW,
     )
     assert cancelled.data["cancelled"] is False
@@ -366,13 +376,24 @@ async def test_cancel_finds_a_booking_by_phone_alone(
         now=NOW,
     )
 
-    cancelled = await tools.cancel(db_session, clinic, phone=CALLER, name="Anna Andersson", now=NOW)
+    cancelled = await tools.cancel(
+        db_session,
+        clinic,
+        phone=CALLER,
+        name="Anna Andersson",
+        settings=agent_settings,
+        now=NOW,
+    )
     assert cancelled.data["cancelled"] is True
 
 
-async def test_cancel_reports_not_found_rather_than_guessing(db_session: AsyncSession) -> None:
+async def test_cancel_reports_not_found_rather_than_guessing(
+    db_session: AsyncSession, agent_settings
+) -> None:
     clinic, _ = await seeded(db_session)
-    cancelled = await tools.cancel(db_session, clinic, phone="070-111 22 33", now=NOW)
+    cancelled = await tools.cancel(
+        db_session, clinic, phone="070-111 22 33", settings=agent_settings, now=NOW
+    )
     assert cancelled.data["cancelled"] is False
     assert "hittar tyvärr ingen bokning" in cancelled.speech
 
@@ -417,7 +438,9 @@ async def test_reschedule_moves_the_booking_and_frees_the_old_slot(
 
     await db_session.refresh(slots[0])
     await db_session.refresh(slots[1])
-    assert slots[0].status is SlotStatus.OPEN
+    # Freed, then immediately held by the cascade a reschedule starts — the hole a moved
+    # appointment leaves is the same hole a cancellation leaves.
+    assert slots[0].status in (SlotStatus.OPEN, SlotStatus.HELD)
     assert slots[1].status is SlotStatus.BOOKED
 
     booking = (

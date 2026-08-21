@@ -1,7 +1,11 @@
 """FastAPI application.
 
-Routers are added as the build order progresses: health + sim now (step 1), agent tools and
-refill webhooks in step 3, the dashboard WebSocket in step 5.
+Routers are added as the build order progresses: health, sim, the agent tools and the inbound
+SMS webhook are up; the dashboard WebSocket lands in step 5.
+
+The refill worker runs inside this process (charter D3: one process until it hurts). It is the
+only background loop in the app, and it is started here rather than inside the refill package
+so that importing `app.refill.engine` from a CLI or a test never starts a timer.
 """
 
 from __future__ import annotations
@@ -13,17 +17,49 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.config import get_settings
-from app.routers import agent, health, sim
+from app.db import get_sessionmaker
+from app.refill.worker import RefillWorker
+from app.routers import agent, health, sim, sms
 
 logger = logging.getLogger("vakans")
 
 
+def _configure_logging() -> None:
+    """Make our own loggers visible under uvicorn.
+
+    Uvicorn installs its own handlers and leaves the root logger at WARNING, so every
+    `logger.info` in this codebase is silently dropped by default. That matters here more than
+    it usually would: `tail -f` on the API log is how you watch a refill cascade advance and how
+    you read the fake SMS bodies when no phone is in the room.
+    """
+    if logger.handlers:
+        return
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)-7s %(name)s  %(message)s"))
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    _configure_logging()
     settings = get_settings()
     # safe_database_url, never database_url — the latter carries the password.
     logger.info("starting vakans env=%s db=%s", settings.env, settings.safe_database_url)
-    yield
+
+    worker: RefillWorker | None = None
+    if settings.refill_worker_enabled:
+        worker = RefillWorker(get_sessionmaker(), settings)
+        worker.start()
+    else:
+        logger.warning("refill worker disabled — cascades will not advance on their own")
+
+    try:
+        yield
+    finally:
+        if worker is not None:
+            await worker.stop()
 
 
 def create_app() -> FastAPI:
@@ -35,6 +71,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(agent.router)
     app.include_router(sim.router)
+    app.include_router(sms.router)
     return app
 
 

@@ -151,8 +151,10 @@ async def reschedule(
 
 
 @router.post("/{clinic_id}/cancel", response_model=ToolResponse)
-async def cancel(clinic_id: UUID, body: CancelRequest, session: SessionDep) -> ToolResponse:
-    """Cancelling emits `slot_freed`, which is what the step-3b refill cascade hangs off."""
+async def cancel(
+    clinic_id: UUID, body: CancelRequest, session: SessionDep, settings: SettingsDep
+) -> ToolResponse:
+    """Cancelling frees the slot and starts the refill cascade in the same transaction."""
     clinic = await _clinic(session, clinic_id)
     result = await tools.cancel(
         session,
@@ -160,6 +162,7 @@ async def cancel(clinic_id: UUID, body: CancelRequest, session: SessionDep) -> T
         booking_ref=body.booking_ref,
         phone=body.phone,
         name=body.name,
+        settings=settings,
         now=now_utc(),
     )
     await session.commit()

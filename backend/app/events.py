@@ -63,6 +63,12 @@ class EventType(StrEnum):
     SEED_COMPLETED = "seed_completed"
     SIM_RESET = "sim_reset"
     INGESTION_COMPLETED = "ingestion_completed"
+    # Spec §6 names the three happy-path refill events but neither of the two ways a cascade
+    # stops without a booking. A dashboard told a cascade started and never told it finished
+    # shows a slot blinking red forever, which reads as a hung demo rather than "nobody wanted
+    # it". See app/refill/engine.py.
+    REFILL_OFFER_EXPIRED = "refill_offer_expired"
+    REFILL_CASCADE_ENDED = "refill_cascade_ended"
 
 
 class EventEnvelope(BaseModel):

@@ -13,14 +13,23 @@ from uuid import uuid4
 import typer
 from rich.console import Console
 from rich.table import Table
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 
 from app.agent.prompt import build_greeting, build_system_prompt
 from app.config import get_settings
 from app.db import unit_of_work
 from app.events import EventType, emit, recent_events
 from app.fixtures import load_demo_profile_document
-from app.models import CLINIC_SCOPED_DELETE_ORDER, Booking, Clinic, Patient, Service, Slot
+from app.models import (
+    CLINIC_SCOPED_DELETE_ORDER,
+    Booking,
+    Clinic,
+    Event,
+    Patient,
+    RefillOffer,
+    Service,
+    Slot,
+)
 from app.schemas.clinic_profile import ClinicProfile
 from app.seed import SeedConfig, seed_clinic
 from app.timeutils import get_tz, now_utc
@@ -247,6 +256,77 @@ def events(
                     str(detail)[:58],
                 )
             console.print(table)
+
+    asyncio.run(_run())
+
+
+@app.command()
+def cascade(
+    slug: str = typer.Option(DEMO_SLUG, help="Clinic to inspect."),
+    limit: int = typer.Option(10, help="How many offers."),
+) -> None:
+    """Show the refill cascade: who was texted, in what order, and how it went.
+
+    The one command to run when a demo does not do what you expected. `sent` with a clock in
+    the future means it is still waiting; `sent` with a clock in the past means the worker is
+    not running (check that `make run` is up and VAKANS_REFILL_WORKER_ENABLED is not false).
+    """
+
+    async def _run() -> None:
+        async with unit_of_work() as session:
+            clinic = (
+                await session.execute(select(Clinic).where(Clinic.slug == slug))
+            ).scalar_one_or_none()
+            if clinic is None:
+                console.print(f"[red]No clinic '{slug}'.[/]")
+                raise typer.Exit(1)
+
+            rows = (
+                await session.execute(
+                    select(RefillOffer, Patient, Slot)
+                    .join(Patient, RefillOffer.patient_id == Patient.id)
+                    .join(Slot, RefillOffer.slot_id == Slot.id)
+                    .where(RefillOffer.clinic_id == clinic.id)
+                    .order_by(RefillOffer.sent_at.desc(), RefillOffer.candidate_n)
+                    .limit(limit)
+                )
+            ).all()
+            if not rows:
+                console.print(
+                    "[yellow]No refill offers.[/] Free a slot first: "
+                    f"curl -XPOST localhost:8000/sim/{clinic.id}/cancel_random"
+                )
+                return
+
+            tz = get_tz(clinic.timezone)
+            colours = {
+                "accepted": "green",
+                "sent": "cyan",
+                "expired": "yellow",
+                "declined": "yellow",
+                "superseded": "dim",
+            }
+            table = Table("#", "cascade", "patient", "slot", "status", "window closes")
+            for offer, patient, slot in rows:
+                status = str(offer.status.value)
+                table.add_row(
+                    str(offer.candidate_n),
+                    str(offer.cascade_id)[:8],
+                    (patient.name or "-")[:22],
+                    slot.starts_at.astimezone(tz).strftime("%a %d %b %H:%M"),
+                    f"[{colours.get(status, 'white')}]{status}[/]",
+                    offer.expires_at.astimezone(tz).strftime("%H:%M:%S"),
+                )
+            console.print(table)
+
+            counter = (
+                await session.execute(
+                    select(func.coalesce(func.sum(Event.sek_value), 0)).where(
+                        Event.clinic_id == clinic.id, Event.type == "slot_refilled"
+                    )
+                )
+            ).scalar_one()
+            console.print(f"\nRecovered revenue: [bold green]{counter:,.0f} kr[/]")
 
     asyncio.run(_run())
 

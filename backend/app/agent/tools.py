@@ -42,6 +42,7 @@ from app.models import (
     WaitlistStatus,
 )
 from app.phone import normalize_e164, same_number
+from app.refill import engine as refill_engine
 from app.risk import RiskInput, noshow_risk
 from app.schemas.clinic_profile import ClinicProfile
 from app.sms import send_sms
@@ -240,7 +241,11 @@ async def book(
 
     if slot is None:
         return ToolResult(speech.SLOT_TAKEN_SPEECH, {"booked": False, "reason": "slot_not_found"})
-    if slot.status not in (SlotStatus.OPEN, SlotStatus.HELD):
+    # `held` counts as taken. That is the whole point of delta G6: while a refill cascade has
+    # an SMS out on this slot, a voice caller must not be able to book it away from the person
+    # who was promised ninety seconds to answer. `availability` never offers a held slot, so
+    # reaching this branch means the caller is working from a stale list.
+    if slot.status is not SlotStatus.OPEN:
         return ToolResult(speech.SLOT_TAKEN_SPEECH, {"booked": False, "reason": "slot_taken"})
 
     service = (
@@ -413,9 +418,15 @@ async def cancel(
     booking_ref: str | None = None,
     phone: str | None = None,
     name: str | None = None,
+    settings: Settings,
     now: datetime,
 ) -> ToolResult:
-    """Cancel and free the slot. The refill cascade hangs off the `slot_freed` event."""
+    """Cancel, free the slot, and start the refill cascade — all in one transaction.
+
+    The cascade is kicked off here rather than by a poller watching for `slot_freed`, because
+    the red-blinking slot and the first SMS are the same moment of the demo. It costs nothing
+    on this call path: `send_sms` only writes a row (see app/sms.py).
+    """
     tz = get_tz(clinic.timezone)
     booking = await _find_booking(session, clinic, booking_ref=booking_ref, phone=phone, name=name)
     if booking is None:
@@ -437,20 +448,10 @@ async def cancel(
         payload={"booking_ref": booking.booking_ref, "service": service.name if service else None},
         actor="agent",
     )
+    cascade = None
     if slot is not None:
-        # The refill engine (step 3b) subscribes to this. Carrying the price means the
-        # dashboard's SEK counter can show what is at stake the moment the slot goes red.
-        await emit(
-            session,
-            clinic_id=clinic.id,
-            type=EventType.SLOT_FREED,
-            payload={
-                "slot_id": str(slot.id),
-                "starts_at": slot.starts_at.isoformat(),
-                "service_id": str(service.id) if service else None,
-            },
-            sek_value=service.price_sek if service else None,
-            actor="agent",
+        cascade = await refill_engine.free_slot_and_cascade(
+            session, clinic, slot, service, settings=settings, now=now
         )
 
     spoken = speech.speak_cancellation(
@@ -466,6 +467,12 @@ async def cancel(
             "cancelled": True,
             "booking_ref": booking.booking_ref,
             "slot_id": str(slot.id) if slot else None,
+            # For the dashboard and the demo operator, not for the agent to read aloud — the
+            # caller who just cancelled does not need to hear that we are texting other people.
+            "refill": cascade.outcome if cascade else None,
+            "refill_cascade_id": (
+                str(cascade.cascade_id) if cascade and cascade.cascade_id else None
+            ),
         },
     )
 
@@ -493,7 +500,7 @@ async def reschedule(
             .with_for_update()
         )
     ).scalar_one_or_none()
-    if new_slot is None or new_slot.status not in (SlotStatus.OPEN, SlotStatus.HELD):
+    if new_slot is None or new_slot.status is not SlotStatus.OPEN:  # held == taken, see book()
         return ToolResult(speech.SLOT_TAKEN_SPEECH, {"rescheduled": False, "reason": "slot_taken"})
 
     old_slot = await session.get(Slot, booking.slot_id)
@@ -523,13 +530,11 @@ async def reschedule(
         actor="agent",
     )
     if old_slot is not None:
-        await emit(
-            session,
-            clinic_id=clinic.id,
-            type=EventType.SLOT_FREED,
-            payload={"slot_id": str(old_slot.id), "starts_at": old_slot.starts_at.isoformat()},
-            sek_value=service.price_sek if service else None,
-            actor="agent",
+        # A moved appointment leaves exactly the same hole as a cancelled one, so it gets the
+        # same cascade. Forgetting this is how a demo ends up with a stale open slot nobody
+        # ever offered to the waitlist.
+        await refill_engine.free_slot_and_cascade(
+            session, clinic, old_slot, service, settings=settings, now=now
         )
 
     patient = await session.get(Patient, booking.patient_id)

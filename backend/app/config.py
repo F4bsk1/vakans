@@ -63,6 +63,15 @@ class Settings(BaseSettings):
     sms_sender_id: str = "Vakans"  # 46elks alphanumeric sender, max 11 chars. Charter D7.
     founder_mobile: str | None = None  # the "JA-svararen" — the ONE real number we may text
 
+    # --- refill cascade (step 3) ----------------------------------------------------------
+    # Spec §3: "Timeout 90 s → nästa kandidat." Configurable because a rehearsal in front of a
+    # customer sometimes wants the cascade to advance in 30 rather than stand in silence.
+    refill_offer_timeout_s: int = 90
+    refill_worker_enabled: bool = True
+    # How often the worker drains the SMS outbox and advances timed-out cascades. Well under
+    # the timeout, so "90 seconds" is never observed as 130.
+    refill_worker_interval_s: float = 5.0
+
     # --- demo sandbox --------------------------------------------------------------------
     seed_rng_seed: int = 20260907
     demo_token: SecretStr | None = None  # guards the destructive /sim/* endpoints
