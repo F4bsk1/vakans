@@ -1,0 +1,635 @@
+/* Layout and panels. Every value here comes from the token scale in globals.css. */
+
+.shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* --- header --------------------------------------------------------------------------- */
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-5);
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--separator);
+}
+
+.brand {
+  display: flex;
+  flex-direction: column;
+  margin-right: auto;
+}
+
+.clinicName {
+  font-size: var(--text-headline);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.clinicMeta {
+  font-size: var(--text-caption);
+  color: var(--label-tertiary);
+}
+
+/* Connection state. Dot + word, never the dot alone. */
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-caption);
+  color: var(--label-secondary);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--bg-sunken);
+}
+
+.statusDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted-fg);
+  flex: none;
+}
+
+.statusLive .statusDot {
+  background: var(--success-fg);
+}
+
+.statusReconnecting .statusDot {
+  background: var(--held-fg);
+  animation: pulse 1.4s var(--ease) infinite;
+}
+
+/* --- demo controls -------------------------------------------------------------------- */
+
+.controls {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--separator-opaque);
+  background: var(--bg-elevated);
+  color: var(--label);
+  font-size: var(--text-footnote);
+  font-weight: 500;
+  transition: background var(--duration-fast) var(--ease);
+}
+
+.button:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.buttonPrimary {
+  background: var(--accent);
+  border-color: transparent;
+  color: var(--accent-fg);
+}
+
+.buttonPrimary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+/* --- page grid ------------------------------------------------------------------------ */
+
+.main {
+  flex: 1;
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5) var(--space-6);
+  grid-template-columns: minmax(0, 1fr) 360px;
+  align-items: start;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+/* One column below the width where a five-day calendar stops fitting. */
+@media (max-width: 1100px) {
+  .main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.panel {
+  background: var(--bg-elevated);
+  border: 1px solid var(--separator);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.panelHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--separator);
+}
+
+.panelTitle {
+  font-size: var(--text-footnote);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--label-secondary);
+}
+
+.panelHint {
+  font-size: var(--text-caption);
+  color: var(--label-tertiary);
+}
+
+.panelBody {
+  padding: var(--space-4);
+}
+
+/* --- KPIs ----------------------------------------------------------------------------- */
+
+.kpiRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-3);
+}
+
+.kpi {
+  background: var(--bg-elevated);
+  border: 1px solid var(--separator);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  box-shadow: var(--shadow-card);
+}
+
+.kpiLabel {
+  font-size: var(--text-caption);
+  color: var(--label-secondary);
+  font-weight: 500;
+}
+
+.kpiValue {
+  font-size: var(--text-title1);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  /* Tabular figures so a ticking counter does not shift its neighbours. */
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+  margin-top: var(--space-1);
+}
+
+.kpiHero .kpiValue {
+  font-size: var(--text-display);
+  color: var(--success-fg);
+}
+
+.kpiHero {
+  background: var(--success-tint);
+  border-color: transparent;
+}
+
+.kpiFoot {
+  font-size: var(--text-caption);
+  color: var(--label-tertiary);
+  margin-top: var(--space-1);
+}
+
+.kpiAtRisk .kpiValue {
+  color: var(--held-fg);
+}
+
+/* --- calendar ------------------------------------------------------------------------- */
+
+/* Both axes scroll inside the panel: five days of four practitioners is roughly 320 rows, and
+   letting that set the page height buries the cascade panel below the fold. */
+.calendarScroll {
+  overflow: auto;
+  max-height: 60vh;
+}
+
+.calendar {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  min-width: 760px;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(150px, 1fr);
+  align-items: start;
+}
+
+.day {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.dayHead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: var(--space-2) var(--space-1);
+  font-size: var(--text-caption);
+  font-weight: 600;
+  color: var(--label-secondary);
+  text-transform: capitalize;
+  border-bottom: 1px solid var(--separator);
+  margin: 0 0 var(--space-2);
+  /* Opaque, not translucent: rows scrolling underneath a see-through header is noise. */
+  background: var(--bg-elevated);
+}
+
+.resourceGroup {
+  margin-bottom: var(--space-3);
+}
+
+.resourceName {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-caption2);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--label-tertiary);
+}
+
+.slotList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dayToday {
+  color: var(--accent);
+}
+
+.dayToday::after {
+  content: " · idag";
+  font-weight: 500;
+  text-transform: none;
+}
+
+/* One line per slot. The first version wrapped to three lines and pushed the working week off
+   the screen; a calendar earns its place by being scannable. */
+.slot {
+  display: grid;
+  grid-template-columns: 34px 10px minmax(0, 1fr) 10px;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 3px var(--space-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: var(--bg-sunken);
+  font-size: var(--text-caption);
+  line-height: 1.3;
+  color: var(--label);
+}
+
+.slotTime {
+  font-variant-numeric: tabular-nums;
+  color: var(--label-secondary);
+  font-size: var(--text-caption2);
+}
+
+.slotGlyph {
+  font-size: var(--text-caption2);
+  line-height: 1;
+}
+
+.slotWho {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.slotPast {
+  opacity: 0.62;
+}
+
+.slotOpen {
+  background: var(--open-tint);
+  border-color: transparent;
+  color: var(--open-fg);
+  font-weight: 500;
+}
+
+.slotHeld {
+  background: var(--held-tint);
+  border-color: var(--held-fg);
+  color: var(--held-fg);
+  font-weight: 600;
+  /* The slot the whole demo points at. Pulse is disabled under prefers-reduced-motion by the
+     global rule, leaving the border to carry it. */
+  animation: pulseRing 1.8s var(--ease) infinite;
+}
+
+.slotNoshow {
+  background: var(--danger-tint);
+  color: var(--danger-fg);
+  border-color: transparent;
+}
+
+.slotCompleted {
+  background: var(--muted-tint);
+  color: var(--muted-fg);
+  border-color: transparent;
+}
+
+.riskMark {
+  font-size: var(--text-caption2);
+  line-height: 1;
+}
+
+.riskGreen {
+  color: var(--risk-green);
+}
+.riskYellow {
+  color: var(--risk-yellow);
+}
+.riskRed {
+  color: var(--risk-red);
+}
+
+/* --- legend --------------------------------------------------------------------------- */
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--separator);
+  font-size: var(--text-caption);
+  color: var(--label-secondary);
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* --- cascade -------------------------------------------------------------------------- */
+
+.cascade + .cascade {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--separator);
+}
+
+.cascadeHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.cascadeSlot {
+  font-weight: 600;
+  font-size: var(--text-body);
+}
+
+.cascadeService {
+  font-size: var(--text-caption);
+  color: var(--label-tertiary);
+}
+
+.cascadePrice {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.offers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.offer {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  font-size: var(--text-footnote);
+}
+
+/* The connector that makes this read as a cascade going down a queue rather than a list. */
+.offer:not(:last-child) .offerMark::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 22px;
+  bottom: -10px;
+  width: 1px;
+  background: var(--separator-opaque);
+  transform: translateX(-50%);
+}
+
+.offerMark {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--bg-sunken);
+  font-size: var(--text-caption);
+  flex: none;
+}
+
+.offerLive {
+  background: var(--held-tint);
+  color: var(--held-fg);
+  animation: pulse 1.8s var(--ease) infinite;
+}
+
+.offerAccepted {
+  background: var(--success-tint);
+  color: var(--success-fg);
+}
+
+.offerName {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.offerState {
+  font-size: var(--text-caption);
+  color: var(--label-tertiary);
+  white-space: nowrap;
+}
+
+.countdown {
+  font-variant-numeric: tabular-nums;
+  color: var(--held-fg);
+  font-weight: 600;
+}
+
+/* --- event feed ----------------------------------------------------------------------- */
+
+.feed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.feedItem {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-footnote);
+  border-bottom: 1px solid var(--separator);
+}
+
+.feedItem:last-child {
+  border-bottom: none;
+}
+
+.feedGlyph {
+  font-size: var(--text-caption);
+  line-height: 1;
+}
+
+.feedText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.feedTime {
+  font-size: var(--text-caption2);
+  color: var(--label-tertiary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.feedSek {
+  color: var(--success-fg);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.feedFresh {
+  animation: slideIn var(--duration) var(--ease);
+}
+
+.toneSuccess {
+  color: var(--success-fg);
+}
+.toneDanger {
+  color: var(--danger-fg);
+}
+.toneHeld {
+  color: var(--held-fg);
+}
+.toneMuted {
+  color: var(--muted-fg);
+}
+.toneOpen {
+  color: var(--open-fg);
+}
+.toneBooked {
+  color: var(--booked-fg);
+}
+
+/* --- states --------------------------------------------------------------------------- */
+
+.empty {
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+  color: var(--label-tertiary);
+  font-size: var(--text-footnote);
+}
+
+.banner {
+  margin: var(--space-4) var(--space-5) 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--danger-tint);
+  color: var(--danger-fg);
+  font-size: var(--text-footnote);
+}
+
+.loading {
+  padding: var(--space-7);
+  text-align: center;
+  color: var(--label-secondary);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@keyframes pulseRing {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  50% {
+    box-shadow: 0 0 0 3px var(--held-tint);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Visually hidden but read aloud. This lives in the *module* because components reference it
+   as `styles.srOnly`; when it existed only in globals.css the class name resolved to
+   `undefined`, no class was applied, and every screen-reader sentence rendered on screen. */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

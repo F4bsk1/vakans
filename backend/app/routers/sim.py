@@ -244,7 +244,11 @@ async def cancel_random(
 
     chosen = rows[0]
     if body.prefer_with_candidates and not body.booking_ref:
-        for row in rows:
+        # Seeded bookings first. Without this the endpoint happily cancels the booking a refill
+        # just created — legitimate, and a terrible thing to do halfway through demonstrating
+        # that the refill saved it.
+        ordered = [r for r in rows if r[0].booked_via == "seed"] or rows
+        for row in ordered:
             candidates = await engine.find_candidates(
                 session, clinic, row[1], service_id=row[2].id, now=now
             )

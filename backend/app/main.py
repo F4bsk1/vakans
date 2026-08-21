@@ -15,11 +15,12 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.db import get_sessionmaker
 from app.refill.worker import RefillWorker
-from app.routers import agent, health, sim, sms
+from app.routers import agent, dash, health, sim, sms
 
 logger = logging.getLogger("vakans")
 
@@ -68,9 +69,18 @@ def create_app() -> FastAPI:
         version="0.1.0",
         lifespan=lifespan,
     )
+    # Scoped to the dashboard's own origins, never "*": /sim/* is destructive and a browser
+    # on any page could otherwise reset a demo that is mid-meeting.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=get_settings().cors_origins,
+        allow_methods=["GET", "POST"],
+        allow_headers=["*"],
+    )
     app.include_router(health.router)
     app.include_router(agent.router)
     app.include_router(sim.router)
+    app.include_router(dash.router)
     app.include_router(sms.router)
     return app
 

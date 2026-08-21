@@ -86,6 +86,12 @@ class Settings(BaseSettings):
     # Where the voice platform reaches this API. The tunnel URL in development.
     public_base_url: str = "http://localhost:8000"
 
+    # --- dashboard (step 5) ---------------------------------------------------------------
+    # The Next.js dashboard runs on its own origin in development, so the browser needs CORS to
+    # call this API. Comma-separated; keep it to the origins that actually serve the dashboard
+    # rather than "*", because /sim/* is destructive and reachable from a browser.
+    dashboard_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
+
     # --- ingestion -----------------------------------------------------------------------
     crawl_max_pages: int = 40
     crawl_max_depth: int = 2
@@ -121,6 +127,10 @@ class Settings(BaseSettings):
         if len(v) > 11:
             raise ValueError(f"sms_sender_id must be <= 11 chars for 46elks, got {len(v)}")
         return v
+
+    @property
+    def cors_origins(self) -> list[str]:
+        return [o.strip() for o in self.dashboard_origins.split(",") if o.strip()]
 
     @property
     def sqlalchemy_url(self) -> str:

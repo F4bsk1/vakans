@@ -1,8 +1,9 @@
-.PHONY: install db-up db-down db-shell migrate revision run test lint fmt seed reset crawl review
+.PHONY: install db-up db-down db-shell migrate revision run test lint fmt seed reset crawl review dash dash-build demo
 
 install:
 	uv sync
 	uv run playwright install chromium
+	cd dashboard && npm install
 
 db-up:
 	@docker info >/dev/null 2>&1 || { echo 'Docker daemon is not running. Start Docker Desktop.'; exit 1; }
@@ -52,3 +53,24 @@ crawl:
 # usage: make review slug=klinik
 review:
 	uv run vakans-review show "$(slug)"
+
+# The Next.js dashboard. Needs `make run` in another terminal — it reads the API on :8000.
+dash:
+	cd dashboard && npm run dev
+
+dash-build:
+	cd dashboard && npm run build
+
+# Everything a demo needs, in one terminal each:
+#   make db-up && make migrate && make seed
+#   make run          (terminal 1: API + refill worker)
+#   make dash         (terminal 2: dashboard on :3000)
+demo:
+	@echo 'Terminal 1: make run'
+	@echo 'Terminal 2: make dash    ->  http://localhost:3000'
+	@echo ''
+	@echo 'Then, from the dashboard header:'
+	@echo '  "Avboka en tid"  -> a slot goes amber, SMS #1 goes out, 90s countdown starts'
+	@echo '  wait 90s         -> the cascade advances to candidate #2 on its own'
+	@echo '  "Svara JA"       -> slot refills, "Raddad intakt" ticks up'
+	@echo '  "Aterstall"      -> back to a clean sandbox between meetings'
