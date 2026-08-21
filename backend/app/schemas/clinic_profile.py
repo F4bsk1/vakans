@@ -163,6 +163,29 @@ class ClinicProfile(BaseModel):
     def practitioners(self) -> list[StaffMember]:
         return list(self.staff)
 
+    def routing_context(self) -> dict[str, Any]:
+        """The minimum the agent needs to route a call — and deliberately no facts.
+
+        No prices, no practitioner names, no opening hours, no FAQ. Everything factual comes
+        back from a tool instead, for three reasons:
+
+        1. A model that was never told a price is far less likely to state one, and if it does,
+           you can hear that it never called the tool.
+        2. The prompt shrinks by roughly two thirds, and every prompt token is processed on
+           every turn of a call with a 1.5-second budget.
+        3. It scales. Familjeläkarna's profile produced a 15,872-character prompt; a clinic
+           with sixty services should not make the agent slower for everyone.
+
+        Service *names* stay, because the agent needs them to tell "en tid för massage" from
+        "en tid hos naprapaten" and to answer "vad erbjuder ni?" without a round trip. Matching
+        what the caller actually said to a service is done server-side in `agent.matching`.
+        """
+        return {
+            "name": self.name,
+            "city": self.city,
+            "services_offered": [s.name for s in self.services if s.bookable],
+        }
+
     def compact(self) -> dict[str, Any]:
         """The `{compact_profile_json}` injected into the agent system prompt (spec §4).
 

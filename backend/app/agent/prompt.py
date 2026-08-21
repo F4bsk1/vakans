@@ -1,7 +1,13 @@
 """The per-clinic system prompt — spec §4.
 
 Generated from `clinic_profile`, so a new clinic needs no prompt engineering: ingest, review,
-seed, and the agent knows the prices, the practitioners and the cancellation policy.
+seed, and the agent is ready to answer that clinic's phone.
+
+**The agent is given no clinic facts.** Spec §4 puts the whole `compact_profile_json` in the
+prompt; we put only the clinic's name, city and service names. Prices, practitioners, opening
+hours and policies come back from tools instead. A model that was never told a price is far
+less likely to state one — and when it does, you can hear that it skipped the tool. It also
+cuts the prompt by roughly two thirds, which matters on every turn of a 1.5-second budget.
 
 Two things here are **hardcoded and must not become clinic-configurable**:
 
@@ -37,8 +43,9 @@ Du är den digitala receptionisten för {clinic_name}{city_clause}.
 
 REGLER:
 1. Svara KORT – max 2 meningar per tur. Läs aldrig upp mer än 3 alternativ.
-2. Du får boka, omboka och avboka tider och svara på praktiska frågor via dina verktyg.
-   Gissa aldrig – använd verktygen även när du tror att du vet svaret.
+2. Du har INGA uppgifter om tider, priser, behandlare eller regler i den här prompten.
+   Allt sådant måste du hämta med ett verktyg. Säger du en tid eller ett pris som inte
+   kommit tillbaka från ett verktyg har du hittat på det.
 3. MEDICINSK GRÄNS: Du bedömer ALDRIG symtom och ger ALDRIG råd om behandling eller
    läkemedel. Vid frågor om symtom: "Det kan jag tyvärr inte bedöma – för rådgivning ring
    1177." Vid ord som bröstsmärta, andnöd, svimning eller kraftig blödning: anropa escalate
@@ -61,8 +68,12 @@ VERKTYG:
 Verktygen returnerar ett fält "speech". Läs upp det ordagrant – det är redan formulerat på
 svenska med rätt tider och priser. Lägg inte till egna tider, priser eller namn.
 
-KUNSKAP OM KLINIKEN:
+OM KLINIKEN:
 {profile_json}
+
+Detta är allt du vet. Priser, lediga tider, behandlarnas namn, öppettider,
+avbokningsregler och försäkringar finns INTE här – hämta dem med knowledge eller
+availability. Vet du inte, lova återkoppling.
 """
 
 
@@ -78,7 +89,7 @@ def build_system_prompt(profile: ClinicProfile, *, recording: bool = False) -> s
         clinic_name=profile.name,
         city_clause=f" i {profile.city}" if profile.city else "",
         greeting=build_greeting(profile, recording=recording),
-        # compact() strips the ingestion provenance fields — they exist for the human QA gate,
-        # and every prompt token costs latency on a live call.
-        profile_json=json.dumps(profile.compact(), ensure_ascii=False, indent=1),
+        # routing_context(), not compact(): the agent is given no facts at all, only what it
+        # needs to route a call. See ClinicProfile.routing_context for why.
+        profile_json=json.dumps(profile.routing_context(), ensure_ascii=False, indent=1),
     )

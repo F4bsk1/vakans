@@ -132,11 +132,33 @@ def test_system_prompt_requires_identity_check_before_touching_a_booking() -> No
     assert "namn och det" in prompt and "telefonnummer" in prompt
 
 
-def test_system_prompt_embeds_the_clinics_real_data() -> None:
+def test_system_prompt_contains_no_clinic_facts() -> None:
+    """The agent is told nothing it could state without calling a tool.
+
+    A model that was never given a price is far less likely to invent one — and when it does
+    say a price, you can hear that it skipped the tool. This is the same principle as
+    scrub_unverified on ingestion: do not rely on the model choosing well.
+    """
     prompt = build_system_prompt(load_demo_profile())
-    assert "Johanna Lindqvist" in prompt
-    assert "895" in prompt
+    for fact in ("895", "695", "Johanna Lindqvist", "Marcus Ohlsson", "08:00", "24 timmar"):
+        assert fact not in prompt, f"{fact!r} leaked into the prompt"
+
+
+def test_system_prompt_keeps_what_it_needs_to_route() -> None:
+    """Service names stay: the agent must tell "en tid för massage" from "hos naprapaten",
+    and answer "vad erbjuder ni?" without a round trip."""
+    prompt = build_system_prompt(load_demo_profile())
     assert "Rörelsekliniken Vasastan" in prompt
+    assert "Klassisk massage 60 min" in prompt
+    assert "Nybesök fysioterapi" in prompt
+
+
+def test_system_prompt_says_the_facts_are_not_there() -> None:
+    """Without this the model treats an empty profile as "nothing to offer" rather than
+    "call a tool"."""
+    prompt = build_system_prompt(load_demo_profile())
+    assert "INGA uppgifter" in prompt
+    assert "hittat på det" in prompt
 
 
 def test_system_prompt_strips_ingestion_provenance() -> None:
