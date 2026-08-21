@@ -60,8 +60,9 @@ def _tools(base_url: str, clinic_id: UUID, token_ref: str) -> list[WebhookTool]:
     return [
         tool(
             "availability",
-            "Hitta lediga tider. Anropa ALLTID detta innan du nämner en tid för kunden — "
-            "hitta aldrig på tider själv. Svaret innehåller färdig text i fältet speech.",
+            "Hämta lediga tider. Anropa EN gång, när kunden ber om en tid och du ännu inte "
+            "har några. Anropa INTE igen när kunden valt en av tiderna — använd book då. "
+            "Svaret innehåller färdig text i speech och ett slot_id per ledig tid.",
             "availability",
             [
                 BodyParam("service_name", "string", "Behandlingen kunden bad om, som de sa det."),
@@ -70,8 +71,9 @@ def _tools(base_url: str, clinic_id: UUID, token_ref: str) -> list[WebhookTool]:
         ),
         tool(
             "book",
-            "Boka en tid. Anropa när kunden valt en av tiderna från availability och du har "
-            "namn och telefonnummer. slot_id och service_id kommer från availability-svaret.",
+            "Boka tiden kunden valt. Anropa så snart du har slot_id, service_id, namn och "
+            "telefonnummer — vänta inte och fråga inte om lediga tider igen. slot_id och "
+            "service_id är exakt de värden availability returnerade.",
             "book",
             [
                 BodyParam("slot_id", "string", "slot_id från availability.", required=True),
