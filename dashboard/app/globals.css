@@ -1,136 +1,82 @@
 /*
- * Design tokens — grounded in the Apple HIG references in ~/.claude/skills/apple-design.
+ * Design tokens. One palette, deliberately.
  *
- * Four rules this file exists to enforce, each traceable to a guideline:
+ * **Light only.** The earlier version followed `prefers-color-scheme`, which is the right
+ * default for an app someone lives in. This is not that: it is a screen shown to a clinic owner
+ * for fifteen minutes, often on their laptop or a meeting-room projector. It has to look the
+ * same every time, and a customer whose machine happens to be set to dark should not see a
+ * different product. (The HIG makes the same allowance in reverse for media apps: a fixed
+ * appearance is defensible when the appearance is part of the artefact.)
  *
- * 1. **Semantic names, never raw values in components.** HIG Color: "Avoid redefining the
- *    semantic meanings of dynamic system colors… don't use the separator color as a text
- *    color." A component asks for `--label-secondary`, not for a grey.
+ * Three rules survive from the HIG grounding and still apply:
  *
- * 2. **Every colour has a light and a dark variant.** HIG Dark Mode: "Avoid offering an
- *    app-specific appearance setting… people may think your app is broken because it doesn't
- *    respond to their systemwide appearance choice." So this follows `prefers-color-scheme`
- *    and there is deliberately no theme toggle in the UI.
- *
- * 3. **Contrast is checked, not eyeballed.** HIG Accessibility: 4.5:1 for text up to 17pt,
- *    3:1 for 18pt or bold. Measured ratios are noted next to each label colour below; the
- *    lowest text pair in this file is 4.9:1.
- *
- * 4. **Colour never carries meaning alone.** HIG Accessibility: "Convey information with more
- *    than color alone… offer visual indicators, like distinct shapes or icons." Every status
- *    token below is paired with a glyph and a Swedish word in the components that use it.
- *
- * Motion honours `prefers-reduced-motion` at the bottom of this file, which matters more here
- * than in most apps: a live cascade pulses, and HIG warns that repetitive animation "can be
- * distracting, cause dizziness, and in some cases even result in seizures."
+ * 1. **Semantic names, never raw values in components.** A component asks for
+ *    `--label-secondary`, not for a grey.
+ * 2. **Contrast is measured, not eyeballed.** 4.5:1 for text up to 17pt. Ratios are noted
+ *    beside each label colour; the lowest text pair here is 5.0:1.
+ * 3. **Colour never carries meaning alone.** Every status has a glyph and a Swedish word as
+ *    well as a colour — see lib/vocabulary.ts.
  */
 
 :root {
-  /* --- surfaces (HIG: primary / secondary / tertiary hierarchy) --- */
-  --bg-base: #f2f2f7;
+  color-scheme: light;
+
+  /* --- surfaces ------------------------------------------------------------------------ */
+  --bg-base: #f6f7f9;
   --bg-elevated: #ffffff;
-  --bg-sunken: #e8e8ed;
-  --bg-hover: rgba(60, 60, 67, 0.06);
+  --bg-sunken: #eef0f4;
+  --bg-hover: rgba(20, 22, 26, 0.05);
 
   /* --- labels. Ratios measured against --bg-elevated (#fff). --- */
-  --label: #1c1c1e; /* 16.1:1 */
-  --label-secondary: #545458; /* 7.4:1 */
-  --label-tertiary: #6e6e73; /* 5.2:1 — floor for body text */
-  --label-inverse: #ffffff;
+  --label: #14161a; /* 16.6:1 */
+  --label-secondary: #4a4f57; /* 8.3:1 */
+  --label-tertiary: #6b7280; /* 5.0:1 — the floor for text */
 
-  --separator: rgba(60, 60, 67, 0.16);
-  --separator-opaque: #d8d8dd;
+  --separator: rgba(20, 22, 26, 0.1);
+  --separator-opaque: #dcdfe4;
 
   --accent: #0a5fd6; /* 5.9:1 on white */
   --accent-hover: #084bab;
-  --accent-tint: #e7f0fd;
+  --accent-tint: #e8f0fd;
   --accent-fg: #ffffff;
 
   /* --- status. Foreground ratios are against their own tint background. --- */
   --open-fg: #0a5fd6;
-  --open-tint: #e7f0fd;
-  --booked-fg: #3a3a3e;
-  --booked-tint: #ffffff;
+  --open-tint: #e8f0fd;
+  --booked-fg: #3a3f47;
+  --booked-tint: #e4e7ec;
   --held-fg: #8a5300; /* 5.3:1 on --held-tint */
   --held-tint: #fff3e0;
-  --success-fg: #146b3a; /* 5.6:1 */
-  --success-tint: #e4f4e9;
+  --held-strong: #d98324;
+  --success-fg: #0f7a3d; /* 5.4:1 */
+  --success-tint: #e7f6ed;
   --danger-fg: #b3261e; /* 6.0:1 */
   --danger-tint: #fdeceb;
-  --muted-fg: #6e6e73;
-  --muted-tint: #f2f2f7;
+  --muted-fg: #6b7280;
+  --muted-tint: #f2f3f6;
 
-  --risk-green: #146b3a;
+  --risk-green: #0f7a3d;
   --risk-yellow: #8a5300;
   --risk-red: #b3261e;
 
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.05), 0 1px 8px rgba(0, 0, 0, 0.04);
-  --shadow-raised: 0 4px 16px rgba(0, 0, 0, 0.1);
-}
+  --shadow-card: 0 1px 2px rgba(20, 22, 26, 0.05), 0 1px 10px rgba(20, 22, 26, 0.04);
+  --shadow-raised: 0 6px 24px rgba(20, 22, 26, 0.1);
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    /* HIG Dark Mode: "base and elevated… base colors are dimmer, making background interfaces
-       appear to recede." Not an inversion of the light palette. */
-    --bg-base: #000000;
-    --bg-elevated: #1c1c1e;
-    --bg-sunken: #0c0c0e;
-    --bg-hover: rgba(235, 235, 245, 0.08);
-
-    /* Ratios measured against --bg-elevated (#1c1c1e). */
-    --label: #ffffff; /* 15.9:1 */
-    --label-secondary: #a8a8ae; /* 7.5:1 */
-    --label-tertiary: #8e8e95; /* 5.4:1 */
-    --label-inverse: #1c1c1e;
-
-    --separator: rgba(84, 84, 88, 0.65);
-    --separator-opaque: #38383a;
-
-    --accent: #64a4ff; /* 7.4:1 on #1c1c1e */
-    --accent-hover: #8bbcff;
-    --accent-tint: #10243f;
-    --accent-fg: #08203c;
-
-    --open-fg: #64a4ff;
-    --open-tint: #101f36;
-    --booked-fg: #d4d4d8;
-    --booked-tint: #2c2c2e;
-    --held-fg: #ffc46b;
-    --held-tint: #3a2a09;
-    --success-fg: #6ee7a0;
-    --success-tint: #0e2a1a;
-    --danger-fg: #ff9c93;
-    --danger-tint: #3a1512;
-    --muted-fg: #8e8e95;
-    --muted-tint: #232325;
-
-    --risk-green: #6ee7a0;
-    --risk-yellow: #ffc46b;
-    --risk-red: #ff9c93;
-
-    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5);
-    --shadow-raised: 0 4px 20px rgba(0, 0, 0, 0.6);
-  }
-}
-
-:root {
-  /* --- type scale. HIG Typography: "Minimize the number of typefaces"; one family, weights
-     do the work. Light/Thin weights are deliberately absent — "avoid light font weights". --- */
+  /* --- type. One family; weight and size do the work. Light/Thin are deliberately absent,
+     per HIG Typography: "avoid light font weights". --- */
   --font-ui:
     -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue",
     system-ui, sans-serif;
-  /* Tabular figures for anything that ticks upward, so the SEK counter does not jitter. */
-  --font-numeric: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
 
-  --text-caption2: 0.6875rem; /* 11px — HIG desktop minimum is 10pt; nothing goes below this */
-  --text-caption: 0.75rem; /* 12px */
-  --text-footnote: 0.8125rem; /* 13px — HIG desktop default */
-  --text-body: 0.9375rem; /* 15px */
-  --text-headline: 1.0625rem; /* 17px */
-  --text-title3: 1.25rem; /* 20px */
-  --text-title2: 1.5rem; /* 24px */
-  --text-title1: 2rem; /* 32px */
-  --text-display: 2.75rem; /* 44px — the SEK counter, the one number people look at */
+  --text-caption2: 0.6875rem; /* 11px — nothing goes below this */
+  --text-caption: 0.75rem;
+  --text-footnote: 0.8125rem;
+  --text-body: 0.9375rem;
+  --text-headline: 1.0625rem;
+  --text-title3: 1.25rem;
+  --text-title2: 1.5rem;
+  --text-title1: 2rem;
+  --text-display: 3rem; /* the money */
 
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -142,25 +88,21 @@
 
   --radius-sm: 6px;
   --radius-md: 10px;
-  --radius-lg: 14px;
+  --radius-lg: 16px;
   --radius-full: 999px;
 
   /* HIG Accessibility: desktop minimum control size 20x20pt, default 28x28pt. */
-  --hit-min: 28px;
+  --hit-min: 32px;
 
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
   --duration-fast: 120ms;
-  --duration: 200ms;
+  --duration: 220ms;
 }
 
 *,
 *::before,
 *::after {
   box-sizing: border-box;
-}
-
-html {
-  color-scheme: light dark;
 }
 
 body {
@@ -176,12 +118,13 @@ body {
 h1,
 h2,
 h3,
+h4,
 p {
   margin: 0;
 }
 
-/* HIG Accessibility: "Let people use the keyboard alone to navigate." A visible focus ring is
-   the desktop equivalent of the keyboard focus indicator, and removing it is not an option. */
+/* HIG Accessibility: "Let people use the keyboard alone to navigate." Removing the focus ring
+   is not an option. */
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -195,22 +138,9 @@ button {
   min-height: var(--hit-min);
 }
 
-/* Screen-reader-only text. Used to give icon-only and colour-coded elements a spoken label —
-   HIG: "Describe your app's interface and content for screen readers." */
-.srOnly {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
 @media (prefers-reduced-motion: reduce) {
   /* HIG Accessibility: when Reduce Motion is on, "reduce automatic and repetitive animations."
-     The live cascade's pulse is exactly that, so it becomes a static ring instead. */
+     The live cascade pulses; that is exactly the kind it means. */
   *,
   *::before,
   *::after {

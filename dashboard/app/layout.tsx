@@ -8,10 +8,10 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  // Both, in this order: the page is styled for whichever the viewer's system is set to, and
-  // HIG Dark Mode is explicit that an app should follow the system rather than offer its own
-  // toggle. See app/globals.css.
-  colorScheme: "light dark",
+  // Light only. This screen is shown to a customer for fifteen minutes, often on their laptop
+  // or a meeting-room projector — it has to look the same every time, and someone whose machine
+  // is set to dark should not see a different product. See app/globals.css.
+  colorScheme: "light",
   width: "device-width",
   initialScale: 1,
 };

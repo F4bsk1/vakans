@@ -37,10 +37,11 @@ colour token, a **distinct glyph**, and a **Swedish word**. `○ Ledig`, `● Bo
 is reinforcement. This matters more than usual here because red-green is exactly the pairing the
 risk bands use, and red-green is the most common colour blindness.
 
-**The system decides light or dark, not the app.** There is deliberately no theme toggle — HIG
-is explicit that an app-specific appearance setting makes people think the app is broken when it
-ignores their system choice. Every token in `globals.css` has both variants, with the measured
-contrast ratio in a comment. The lowest text pair is 4.9:1, against a 4.5:1 requirement.
+**Light only.** One palette, no `prefers-color-scheme` branch. The HIG default is to follow the
+system setting, and that is right for an app someone lives in — this is not that. It is a screen
+shown to a customer for fifteen minutes, often on their laptop or a meeting-room projector, and
+it has to look the same every time. Measured contrast ratios are in comments beside each token;
+the lowest text pair is 5.0:1 against a 4.5:1 requirement.
 
 **Nothing human-readable is assembled in the browser.** Weekday names, clock times and phrases
 like "på måndag kl 8 hos Priya" arrive pre-rendered from the backend — the same rule that makes
@@ -52,6 +53,17 @@ timezone rather than the laptop's.
 **Motion is optional.** The held slot and the live offer pulse. Under
 `prefers-reduced-motion: reduce` they become static, because HIG is blunt about repetitive
 animation causing dizziness and, at worst, seizures.
+
+## Why it leads with a sentence
+
+The top of the page is one line of Swedish saying what just happened, then two numbers. Below
+that, the whole week as one small block per slot.
+
+The first version led with five equal-weight KPI cards over a scrolling list of 320 calendar
+rows. Accurate, and the wrong instrument: nobody in a fifteen-minute meeting reads three hundred
+rows, and the one slot that mattered — the one a cascade was texting people about — was reliably
+below the fold. Compressed, the whole clinic week fits on screen and the freed slot is the only
+thing moving on it.
 
 ## What running it in a browser changed
 

@@ -2,10 +2,10 @@
 
 import { useCallback, useState } from "react";
 
-import { Calendar } from "@/components/Calendar";
 import { CascadePanel } from "@/components/CascadePanel";
 import { EventFeed } from "@/components/EventFeed";
-import { Kpis } from "@/components/Kpis";
+import { Hero } from "@/components/Hero";
+import { WeekOverview } from "@/components/WeekOverview";
 import { sim } from "@/lib/api";
 import type { DashState } from "@/lib/types";
 import { useDashboard, type Connection } from "@/lib/useDashboard";
@@ -112,8 +112,8 @@ export default function Dashboard({
 
       <main className={styles.main}>
         <div className={styles.column}>
-          <Kpis kpis={state.kpis} />
-          <Calendar days={state.days} resources={state.resources} />
+          <Hero kpis={state.kpis} cascades={state.cascades} />
+          <WeekOverview days={state.days} resources={state.resources} />
         </div>
         <div className={styles.column}>
           <CascadePanel cascades={state.cascades} />
