@@ -71,7 +71,13 @@ Consequences worth internalising:
 
 - You cannot push anything into a call in progress. Anything the agent says must be the answer
   to a tool call it decided to make.
-- You never receive the transcript live. You see *what the agent did*, not what was said.
+- **You never receive the transcript live.** You see the arguments the model put in a tool
+  call — never the caller's sentence. That is the single most important consequence of being
+  the server, and it is why `safety.py` is a backstop rather than a filter: it can only screen
+  the fields the model happened to fill with the caller's own words (`knowledge.question`,
+  `escalate.reason`), not the conversation. The real-time boundary is the prompt's job.
+  ElevenLabs' **post-call webhook** delivers the full transcript once the call ends, which is
+  where an audit belongs — not blocking, but "how often did the boundary hold?".
 - If your laptop sleeps or the API stops, the agent keeps talking — it just gets errors from
   every tool and starts improvising. That failure is quiet and sounds plausible, which is
   exactly why the event log is the thing to trust.

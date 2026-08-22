@@ -1,12 +1,25 @@
 """The medical boundary — charter §2, spec §4 rule 3.
 
-The charter is explicit that this is "a product line, not a nice-to-have". So it is enforced
-**server-side on every free-text input**, not left to the model.
+The charter is explicit that this is "a product line, not a nice-to-have". The system prompt
+tells the agent to call `escalate` when it hears a red flag, and it usually will — but "usually"
+is the wrong standard when the failure mode is a caller with chest pain being offered a
+physiotherapy appointment. So this runs on the server too.
 
-That distinction matters. The system prompt tells the agent to call `escalate` when it hears
-a red flag, and it usually will — but "usually" is the wrong standard when the failure mode is
-a caller with chest pain being offered a physiotherapy appointment. Same argument as
-`merge.scrub_unverified`: the prompt asks, the code enforces.
+**Be precise about what that does and does not cover.** We are the *server*: ElevenLabs holds
+the microphone and the transcript, and calls us. So the only text we ever see is the arguments
+the model chose to put in a tool call — never the caller's actual words. Concretely:
+
+- `knowledge(question=...)` and `escalate(reason=...)` are documented as "ordagrant", so they
+  usually do carry what the caller said. This is where the check earns its keep: a caller who
+  asks "är det farligt att det gör ont i bröstet?" gets stopped here even when the model routed
+  it as an ordinary question.
+- `availability(service_name=...)` receives the model's *interpretation* — "massage", not the
+  sentence around it. A red flag phrased there will usually not reach us at all.
+
+So this is a **backstop on the fields we receive, not a filter on the conversation**. The
+real-time boundary is the model's, and the prompt has to carry it. ElevenLabs offers no
+real-time transcript; their post-call webhook delivers the full transcript after the call ends,
+which is the right place to *audit* how often the boundary held — see docs/RUNBOOK.md.
 
 Two tiers, matching spec §4:
 

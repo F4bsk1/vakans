@@ -14,8 +14,9 @@ stayed behind and made the agent sound like a phone menu.
 - The agent is given no clinic facts at all — `routing_context()` is a name, a city and service
   names. It cannot state a price from memory because it was never told one.
 - Every tool returns a finished Swedish `speech` string. The model never formats a time.
-- `app.agent.safety` enforces the medical boundary server-side on every tool call, whatever the
-  prompt happens to say.
+- `app.agent.safety` re-checks the medical boundary server-side on the tool arguments that
+  carry the caller's own words. It is a backstop, not a filter — we never receive the
+  transcript, so the prompt still has to carry the boundary in real time. See safety.py.
 
 So the rules below are a brief, not a cage. Three things are still hardcoded and must never
 become clinic-configurable:
