@@ -115,16 +115,27 @@ def test_recording_disclosure_is_part_of_the_greeting() -> None:
 
 def test_system_prompt_carries_the_medical_boundary() -> None:
     prompt = build_system_prompt(load_demo_profile())
-    assert "MEDICINSK GRÄNS" in prompt
-    assert "1177" in prompt
-    assert "bröstsmärta" in prompt
+    assert "bedömer aldrig symtom" in prompt
     assert "escalate" in prompt
+    for red_flag in ("bröstsmärta", "andnöd", "svimning", "blödning"):
+        assert red_flag in prompt
+
+
+def test_the_caller_is_referred_to_1177_by_the_tool_not_the_prompt() -> None:
+    """1177 used to be a line in the prompt, which made it dependent on the model repeating it.
+
+    It now lives in `safety`'s speech, which `escalate` returns and the agent reads verbatim —
+    so the referral happens whether or not the model was paying attention.
+    """
+    assert "1177" in safety.ADVICE_SPEECH
+    assert "1177" in safety.EMERGENCY_SPEECH
+    assert "1177" not in build_system_prompt(load_demo_profile())
 
 
 def test_system_prompt_forbids_inventing_prices() -> None:
     """Same rule scrub_unverified enforces on ingestion, stated to the agent."""
     prompt = build_system_prompt(load_demo_profile())
-    assert "Hitta ALDRIG på priser" in prompt
+    assert "hittat på det" in prompt
 
 
 def test_system_prompt_requires_identity_check_before_touching_a_booking() -> None:
@@ -157,7 +168,7 @@ def test_system_prompt_says_the_facts_are_not_there() -> None:
     """Without this the model treats an empty profile as "nothing to offer" rather than
     "call a tool"."""
     prompt = build_system_prompt(load_demo_profile())
-    assert "INGA uppgifter" in prompt
+    assert "inga uppgifter" in prompt
     assert "hittat på det" in prompt
 
 
@@ -172,3 +183,23 @@ def test_system_prompt_tells_the_agent_to_read_speech_verbatim() -> None:
     """The whole latency trick collapses if the model re-renders times and prices itself."""
     prompt = build_system_prompt(load_demo_profile())
     assert "ordagrant" in prompt
+
+
+def test_the_opening_discloses_that_the_caller_is_talking_to_an_ai() -> None:
+    """EU AI Act art. 50. It is set as ElevenLabs' `first_message` too, but it stays in the
+    prompt as well so clearing that field in their dashboard cannot silently drop it."""
+    profile = load_demo_profile()
+    greeting = build_greeting(profile)
+
+    assert "digitala assistent" in greeting
+    assert greeting in build_system_prompt(profile)
+
+
+def test_the_prompt_stays_short() -> None:
+    """Every character is processed on every turn of a call with a 1.5-second budget.
+
+    The ceiling is generous. It exists to catch a regression back to the 3,126-character
+    version with its numbered rule list and five-step booking flowchart — which is what made
+    the agent sound like a phone menu, and which the tool descriptions made unnecessary.
+    """
+    assert len(build_system_prompt(load_demo_profile())) < 2000

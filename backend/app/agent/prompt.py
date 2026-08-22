@@ -3,19 +3,29 @@
 Generated from `clinic_profile`, so a new clinic needs no prompt engineering: ingest, review,
 seed, and the agent is ready to answer that clinic's phone.
 
-**The agent is given no clinic facts.** Spec §4 puts the whole `compact_profile_json` in the
-prompt; we put only the clinic's name, city and service names. Prices, practitioners, opening
-hours and policies come back from tools instead. A model that was never told a price is far
-less likely to state one — and when it does, you can hear that it skipped the tool. It also
-cuts the prompt by roughly two thirds, which matters on every turn of a 1.5-second budget.
+**Short on purpose.** An earlier version ran to 3,126 characters with a numbered rule list and a
+five-step booking flowchart. That was an over-correction: the agent had once looped on
+`availability`, but the cause was a tool description that said "call this ALWAYS before
+mentioning a time", not a missing script. Fixing the description fixed the loop; the flowchart
+stayed behind and made the agent sound like a phone menu.
 
-Two things here are **hardcoded and must not become clinic-configurable**:
+**The guarantees do not live in this file.** That is what makes a loose prompt safe here:
 
-- The opening line discloses that the caller is talking to an AI. EU AI Act art. 50, called
-  "non-negotiable" in the charter §2.
-- The medical boundary. `app.agent.safety` enforces it server-side regardless of what the
-  model does, but the prompt must agree with the code — a prompt that invited symptom
-  assessment would produce a conversation the safety layer then has to interrupt.
+- The agent is given no clinic facts at all — `routing_context()` is a name, a city and service
+  names. It cannot state a price from memory because it was never told one.
+- Every tool returns a finished Swedish `speech` string. The model never formats a time.
+- `app.agent.safety` enforces the medical boundary server-side on every tool call, whatever the
+  prompt happens to say.
+
+So the rules below are a brief, not a cage. Three things are still hardcoded and must never
+become clinic-configurable:
+
+- The opening discloses that the caller is talking to an AI. EU AI Act art. 50, "non-negotiable"
+  per charter §2.
+- The medical boundary, which must agree with the code that enforces it.
+- Never stating a price that did not come from a tool. Spec §5: "Fel pris i demo = död affär".
+
+`tests/unit/test_prompt.py` asserts all three survive any future edit.
 """
 
 from __future__ import annotations
@@ -24,7 +34,9 @@ import json
 
 from app.schemas.clinic_profile import ClinicProfile
 
-# Spec §4: "ÖPPNING (obligatorisk, exakt)". Read verbatim at call start.
+# Spec §4: "ÖPPNING (obligatorisk, exakt)". Read verbatim at call start. On ElevenLabs this is
+# also set as `first_message`; it stays in the prompt as well so the disclosure survives someone
+# clearing that field in the dashboard.
 GREETING_TEMPLATE = (
     "Hej, du har kommit till {clinic_name}. "
     "Du pratar med vår digitala assistent – jag kan hjälpa dig boka, omboka "
@@ -36,55 +48,34 @@ GREETING_TEMPLATE = (
 RECORDING_DISCLOSURE = " Samtalet spelas in för kvalitetsändamål och raderas efter sju dagar."
 
 SYSTEM_PROMPT_TEMPLATE = """\
-Du är den digitala receptionisten för {clinic_name}{city_clause}.
+Du är receptionist på {clinic_name}{city_clause}.
 
-ÖPPNING (obligatorisk, exakt):
+Säg detta först, ordagrant:
 "{greeting}"
 
-REGLER:
-1. Svara KORT – max 2 meningar per tur. Läs aldrig upp mer än 3 alternativ.
-2. Du har INGA uppgifter om tider, priser, behandlare eller regler i den här prompten.
-   Allt sådant måste du hämta med ett verktyg. Säger du en tid eller ett pris som inte
-   kommit tillbaka från ett verktyg har du hittat på det.
-3. MEDICINSK GRÄNS: Du bedömer ALDRIG symtom och ger ALDRIG råd om behandling eller
-   läkemedel. Vid frågor om symtom: "Det kan jag tyvärr inte bedöma – för rådgivning ring
-   1177." Vid ord som bröstsmärta, andnöd, svimning eller kraftig blödning: anropa escalate
-   direkt och läs upp svaret ordagrant.
-4. Bekräfta aldrig uppgifter om en befintlig bokning utan att först be om namn och det
-   telefonnummer bokningen gjordes med.
-5. Vet du inte svaret: lova återkoppling, hitta aldrig på. Hitta ALDRIG på priser – om ett
-   pris saknas säger du att en kollega återkommer med det.
-6. Prata svenska, varmt och effektivt. Sammanfatta bokningen innan du bekräftar: tjänst, tid,
-   behandlare och pris.
-7. Om någon ber att få prata med en människa: anropa escalate och lova återkoppling.
+Prata sedan som en riktig receptionist: varmt, kort och effektivt. Du får småprata, svara på
+följdfrågor och ta samtalet i den ordning kunden vill. Låt bli att låta som ett formulär.
 
-BOKNINGSFLÖDE (följ ordningen – gå aldrig bakåt):
-1. Kunden vill ha en tid -> anropa availability EN gång.
-2. Läs upp svarets speech. Vänta på att kunden väljer en av tiderna.
-3. Saknar du namn eller telefonnummer: fråga efter dem nu.
-4. Anropa book med samma slot_id och service_id som availability gav dig.
-5. Läs upp bookings speech. Bokningen är klar.
+Du har inga uppgifter om lediga tider, priser, behandlare, öppettider eller avbokningsregler.
+Allt sådant hämtar du med ett verktyg. Verktygen svarar med ett fält "speech" som redan är
+formulerat på svenska med rätt tid och rätt pris – läs upp det ordagrant. Säger du en tid eller
+ett pris som inte kommit tillbaka från ett verktyg har du hittat på det.
 
-Har du redan fått tider från availability i det här samtalet anropar du det INTE igen,
-även om kunden upprepar sig eller ber om något förtydligande. Gå vidare i flödet. Behöver
-kunden helt andra tider (annan dag eller annan behandling) får du anropa availability på nytt.
+Du bedömer aldrig symtom och ger aldrig råd om behandling eller läkemedel. Vid frågor om symtom,
+vid ord som bröstsmärta, andnöd, svimning eller kraftig blödning, vid klagomål, eller när någon
+vill prata med en människa: anropa escalate och läs upp svaret ordagrant.
 
-VERKTYG:
-- availability: lediga tider. En gång per önskemål, innan du föreslår en tid.
-- book: boka den valda tiden. Kräver slot_id, service_id, namn och telefonnummer.
-- reschedule / cancel: kräver bokningsreferens eller namn + telefonnummer.
-- knowledge: praktiska frågor om kliniken (priser, parkering, öppettider, avbokning).
-- escalate: medicinska frågor, klagomål, eller när någon vill prata med en människa.
+Innan du ändrar eller avbokar en befintlig tid: be om namn och det telefonnummer bokningen
+gjordes med.
 
-Verktygen returnerar ett fält "speech". Läs upp det ordagrant – det är redan formulerat på
-svenska med rätt tider och priser. Lägg inte till egna tider, priser eller namn.
+Vet du inte: lova återkoppling. Hitta aldrig på.
+
+VERKTYG: availability (lediga tider) · book (boka den valda tiden) · reschedule · cancel ·
+waitlist (när ingen tid passar) · knowledge (priser, öppettider, parkering, avbokning) ·
+escalate (medicinskt, klagomål, vill prata med människa).
 
 OM KLINIKEN:
 {profile_json}
-
-Detta är allt du vet. Priser, lediga tider, behandlarnas namn, öppettider,
-avbokningsregler och försäkringar finns INTE här – hämta dem med knowledge eller
-availability. Vet du inte, lova återkoppling.
 """
 
 

@@ -18,3 +18,9 @@ artifacts/
 # Dashboard (step 5)
 dashboard/node_modules/
 dashboard/.next/
+
+# Generated ElevenLabs config. The agent prompt (agent_configs/) IS tracked — what the agent
+# says should be reviewable in a diff. The tool configs are not: they are mechanically derived
+# and embed the cloudflared URL, which changes on every tunnel restart and would otherwise put
+# seven modified files in `git status` all day. Regenerate with `make voice`.
+elevenlabs/tool_configs/

@@ -1,4 +1,4 @@
-.PHONY: install db-up db-down db-shell migrate revision run test lint fmt seed reset crawl review dash dash-build demo
+.PHONY: install db-up db-down db-shell migrate revision run test lint fmt seed reset crawl review dash dash-build demo voice voice-push
 
 install:
 	uv sync
@@ -53,6 +53,15 @@ crawl:
 # usage: make review slug=klinik
 review:
 	uv run vakans-review show "$(slug)"
+
+# Regenerate the ElevenLabs agent config from the clinic profile.
+#   usage: make voice [slug=demo] [url=https://<tunnel>]
+voice:
+	uv run python -m app.cli voice --slug "$(or $(slug),demo)" $(if $(url),--base-url "$(url)",)
+
+# Same, and upload it. Needs VAKANS_ELEVENLABS_API_KEY + VAKANS_ELEVENLABS_AGENT_ID.
+voice-push:
+	uv run python -m app.cli voice --slug "$(or $(slug),demo)" $(if $(url),--base-url "$(url)",) --push
 
 # The Next.js dashboard. Needs `make run` in another terminal — it reads the API on :8000.
 dash:

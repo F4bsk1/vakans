@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 from uuid import uuid4
 
 import typer
@@ -158,8 +159,19 @@ def list_clinics() -> None:
 def voice(
     slug: str = typer.Option(DEMO_SLUG, help="Clinic to generate the agent config for."),
     base_url: str = typer.Option(None, help="Public URL ElevenLabs will call. Defaults to config."),
+    push: bool = typer.Option(False, "--push", help="Also upload it to ElevenLabs."),
 ) -> None:
-    """Write the ElevenLabs agent config: greeting, system prompt and the seven webhook tools."""
+    """Generate the ElevenLabs agent config, and optionally push it.
+
+    Writes the config twice, on purpose:
+
+    - `elevenlabs/` in the repo root, in the layout the official `elevenlabs agents push` CLI
+      reads. Git-tracked, so what the agent says is reviewable in a diff.
+    - `artifacts/<slug>/*.md`, a human setup sheet for entering it by hand.
+
+    Both are generated from the same clinic profile, so they cannot drift. `--push` uploads via
+    the API without needing their CLI installed; the files stay valid either way.
+    """
 
     async def _run() -> None:
         settings = get_settings()
@@ -175,32 +187,48 @@ def voice(
                 raise typer.Exit(1)
 
             profile = ClinicProfile.model_validate(clinic.profile["profile"])
+            prompt = build_system_prompt(profile)
+            greeting = build_greeting(profile)
+
+            # --- config as code, in the official CLI's layout ---------------------------
+            cfg_dir = Path("elevenlabs")
+            (cfg_dir / "agent_configs").mkdir(parents=True, exist_ok=True)
+            (cfg_dir / "tool_configs").mkdir(parents=True, exist_ok=True)
+
+            _write_json(
+                cfg_dir / "agents.json",
+                elevenlabs.agents_registry(slug=slug, agent_id=settings.elevenlabs_agent_id),
+            )
+            _write_json(
+                cfg_dir / "agent_configs" / f"{slug}.json",
+                elevenlabs.agent_config(
+                    clinic_name=clinic.name, prompt=prompt, first_message=greeting
+                ),
+            )
+            for payload in elevenlabs.tool_payloads(base_url=public, clinic_id=clinic.id):
+                name = payload["tool_config"]["name"]
+                _write_json(cfg_dir / "tool_configs" / f"{slug}-{name}.json", payload)
+
+            # --- the fallback sheet, for entering it by hand -----------------------------
             out_dir = settings.artifacts_dir / slug
             out_dir.mkdir(parents=True, exist_ok=True)
-
-            prompt_path = out_dir / "elevenlabs-agent.md"
-            prompt_path.write_text(
+            (out_dir / "elevenlabs-agent.md").write_text(
                 f"# ElevenLabs agent — {clinic.name}\n\n"
                 f"clinic_id: {clinic.id}\nLanguage: Swedish   TTS: Flash v2.5\n\n"
-                f"## First message\n\n{build_greeting(profile)}\n\n"
-                f"## System prompt\n\n{build_system_prompt(profile)}\n",
+                f"## First message\n\n{greeting}\n\n"
+                f"## System prompt\n\n{prompt}\n",
                 encoding="utf-8",
             )
-            tools_path = out_dir / "elevenlabs-tools.md"
-            tools_path.write_text(
+            (out_dir / "elevenlabs-tools.md").write_text(
                 elevenlabs.as_markdown(
                     base_url=public, clinic_id=clinic.id, clinic_name=clinic.name
                 ),
                 encoding="utf-8",
             )
-            json_path = out_dir / "elevenlabs-tools.json"
-            json_path.write_text(
-                elevenlabs.as_json(base_url=public, clinic_id=clinic.id), encoding="utf-8"
-            )
 
-            console.print(f"[green]Agent config[/] -> {prompt_path}")
-            console.print(f"[green]Tool setup sheet[/] -> {tools_path}")
-            console.print(f"[green]Tool JSON[/] -> {json_path}")
+            console.print(f"[green]Config as code[/] -> {cfg_dir}/  ({len(prompt)} char prompt)")
+            console.print(f"[green]Setup sheet[/]    -> {out_dir}/elevenlabs-agent.md")
+
             if public.startswith("http://localhost"):
                 console.print(
                     "\n[yellow]VAKANS_PUBLIC_BASE_URL is still localhost.[/] ElevenLabs cannot "
@@ -212,7 +240,40 @@ def voice(
                     "request until it is. Generate one: openssl rand -hex 32"
                 )
 
+            if not push:
+                console.print(
+                    "\nPush it with [bold]--push[/], or with their CLI: "
+                    "[bold]cd elevenlabs && elevenlabs agents push[/]"
+                )
+                return
+
+            try:
+                result = await elevenlabs.push(
+                    settings=settings,
+                    clinic_name=clinic.name,
+                    clinic_id=clinic.id,
+                    base_url=public,
+                    prompt=prompt,
+                    first_message=greeting,
+                )
+            except elevenlabs.PushError as exc:
+                console.print(f"\n[red]Push failed.[/] {exc}")
+                raise typer.Exit(1) from exc
+
+            console.print(f"\n[bold green]Pushed[/] to agent {result.agent_id}")
+            if result.tools_created:
+                console.print(f"  created: {', '.join(result.tools_created)}")
+            if result.tools_updated:
+                console.print(f"  updated: {', '.join(result.tools_updated)}")
+            console.print(
+                "  [dim]voice, model and turn-taking left untouched — those stay yours[/]"
+            )
+
     asyncio.run(_run())
+
+
+def _write_json(path: Path, payload: dict) -> None:
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 @app.command()
