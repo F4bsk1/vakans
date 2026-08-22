@@ -169,28 +169,42 @@ elevenlabs/
   tool_configs/demo-*.json       # the 7 webhook tools   (gitignored, see below)
 ```
 
-### One-time setup
+### One-time setup: tools first, then the agent
+
+The order is not obvious and matters. An agent references its tools *by id*, and those ids only
+exist once the tools have been pushed. So the first run is two passes:
 
 ```bash
 npm install -g @elevenlabs/cli
-elevenlabs auth login                     # reads ELEVENLABS_API_KEY, not a VAKANS_ one
+elevenlabs auth login          # ELEVENLABS_API_KEY. Restrict the key to ElevenAgents: Write.
+
+make voice url=https://<current-tunnel>
+
+cd elevenlabs
+elevenlabs tools push          # creates the 7 tools, writes their ids into tools.json
+cd .. && make voice url=https://<current-tunnel>   # picks the ids up into the agent config
 cd elevenlabs
 elevenlabs agents add "Rörelsekliniken Vasastan" --from-file agent_configs/demo.json
 ```
 
-`agents add` creates the agent on ElevenLabs and prints its id. Put that in
-`VAKANS_ELEVENLABS_AGENT_ID` in `.env` and re-run `make voice`, so `agents.json` carries the id
-and future pushes *update* instead of creating a second agent.
+`vakans voice` prints which pass you are in, so you do not have to remember this.
+
+`agents add` prints the new agent's id. Put it in `VAKANS_ELEVENLABS_AGENT_ID`.
 
 ### Every time after that
 
 ```bash
-make voice url=https://<current-tunnel>     # regenerate from the clinic profile
+make voice url=https://<current-tunnel>
 cd elevenlabs
-elevenlabs agents push --dry-run            # see exactly what would change
+elevenlabs agents push --dry-run            # read this before the real one
 elevenlabs agents push
 elevenlabs tools push
 ```
+
+**`make voice` never destroys an id.** Both registries are merged, not overwritten: `tools push`
+records ids in `tools.json` and an entry *without* an id means "create", so blindly regenerating
+would mint seven fresh tools on every tunnel restart. The ids in the files win over `.env`,
+because the files are what the CLI actually did.
 
 ### What we deliberately do not generate
 

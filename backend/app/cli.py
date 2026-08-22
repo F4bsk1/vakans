@@ -193,9 +193,21 @@ def voice(
             (cfg_dir / "agent_configs").mkdir(parents=True, exist_ok=True)
             (cfg_dir / "tool_configs").mkdir(parents=True, exist_ok=True)
 
+            # Read the registries back before rewriting them: their CLI records the ids it gets
+            # from ElevenLabs in these files, and an entry without an id means "create". Losing
+            # them here would mint a duplicate agent and seven duplicate tools on every run —
+            # and this runs every time the tunnel URL changes.
+            tools_registry = _read_json(cfg_dir / "tools.json")
+            agents_registry = _read_json(cfg_dir / "agents.json")
+            tool_ids = elevenlabs.tool_ids_from_registry(tools_registry)
+
             _write_json(
                 cfg_dir / "agents.json",
-                elevenlabs.agents_registry(slug=slug, agent_id=settings.elevenlabs_agent_id),
+                elevenlabs.agents_registry(
+                    slug=slug,
+                    agent_id=settings.elevenlabs_agent_id,
+                    existing=agents_registry,
+                ),
             )
             _write_json(
                 cfg_dir / "agent_configs" / f"{slug}.json",
@@ -209,11 +221,18 @@ def voice(
                         service_names=[s.name for s in profile.services if s.bookable],
                         staff_names=[m.name for m in profile.staff],
                     ),
+                    tool_ids=tool_ids,
                 ),
             )
+
+            names: list[str] = []
             for payload in elevenlabs.tool_payloads(base_url=public, clinic_id=clinic.id):
-                name = payload["tool_config"]["name"]
-                _write_json(cfg_dir / "tool_configs" / f"{slug}-{name}.json", payload)
+                names.append(payload["name"])
+                _write_json(cfg_dir / "tool_configs" / f"{slug}-{payload['name']}.json", payload)
+            _write_json(
+                cfg_dir / "tools.json",
+                elevenlabs.tools_registry(slug=slug, tool_names=names, existing=tools_registry),
+            )
 
             # --- the fallback sheet, for entering it by hand -----------------------------
             out_dir = settings.artifacts_dir / slug
@@ -247,23 +266,34 @@ def voice(
                     "request until it is. Generate one: openssl rand -hex 32"
                 )
 
-            console.print("\nDeploy it with their CLI:")
-            if settings.elevenlabs_agent_id:
-                console.print("  [bold]cd elevenlabs && elevenlabs agents push --dry-run[/]")
-                console.print("  [bold]cd elevenlabs && elevenlabs agents push[/]")
-            else:
-                # No id yet, so `push` has nothing to update. `add --from-file` creates the
-                # agent from our config and records the id it gets back.
+            # The order matters and is not obvious: tools must exist before the agent can
+            # reference them, and their ids only exist after a push. So the first run is a
+            # two-pass dance, and every run after that is one command.
+            console.print("\n[bold]Next:[/]  cd elevenlabs")
+            if not tool_ids:
+                console.print("  1. [bold]elevenlabs tools push[/]      creates the 7 tools")
+                console.print(f"  2. [bold]make voice slug={slug}[/]      picks up their new ids")
                 console.print(
-                    f'  [bold]cd elevenlabs && elevenlabs agents add "{clinic.name}" '
+                    f'  3. [bold]elevenlabs agents add "{clinic.name}" '
                     f"--from-file agent_configs/{slug}.json[/]"
                 )
-                console.print(
-                    "  [dim]then put the id it prints in VAKANS_ELEVENLABS_AGENT_ID "
-                    "and re-run this[/]"
-                )
+            else:
+                console.print(f"  tools linked: [green]{len(tool_ids)}[/]/7")
+                console.print("  [bold]elevenlabs tools push[/]")
+                console.print("  [bold]elevenlabs agents push --dry-run[/] then without it")
 
     asyncio.run(_run())
+
+
+def _read_json(path: Path) -> dict | None:
+    """Existing registry, or None. Never fatal — a corrupt file should not block a regenerate."""
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        console.print(f"[yellow]Could not read {path}, treating it as empty.[/]")
+        return None
 
 
 def _write_json(path: Path, payload: dict) -> None:

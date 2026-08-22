@@ -145,28 +145,69 @@ def _tools(base_url: str, clinic_id: UUID, token_ref: str) -> list[WebhookTool]:
 # --- the shapes ElevenLabs accepts ----------------------------------------------------------
 
 
+# How long their side waits for one of our tools. Ours answer in well under 100 ms locally, but
+# the request crosses a tunnel; their own template uses 30 and there is no reason to be tighter.
+TOOL_TIMEOUT_SECONDS = 30
+
+
 def tool_payload(tool: WebhookTool) -> dict[str, Any]:
-    """One tool in the documented `POST /v1/convai/tools` shape."""
+    """One tool, in the shape `elevenlabs tools push` reads from a `tool_configs/*.json` file.
+
+    **Unwrapped.** The REST API takes `{"tool_config": {...}}`, and an earlier version of this
+    function emitted that — which was wrong for the file, because their CLI reads the file and
+    wraps it itself. Confirmed by reading `dist/tools/commands/impl.js` in their package rather
+    than by guessing: `addTool` writes exactly these keys at the top level.
+    """
     return {
-        "tool_config": {
-            "type": "webhook",
-            "name": tool.name,
-            "description": tool.description,
-            "api_schema": {
-                "url": tool.url,
-                "method": tool.method,
-                "request_headers": dict(tool.headers),
-                "request_body_schema": {
-                    "type": "object",
-                    "properties": {
-                        p.name: {"type": p.type, "description": p.description}
-                        for p in tool.body_params
-                    },
-                    "required": [p.name for p in tool.body_params if p.required],
+        "name": tool.name,
+        "description": tool.description,
+        "type": "webhook",
+        "api_schema": {
+            "url": tool.url,
+            "method": tool.method,
+            "request_headers": dict(tool.headers),
+            "request_body_schema": {
+                "type": "object",
+                "description": f"Request body for {tool.name}",
+                "properties": {
+                    p.name: {"type": p.type, "description": p.description} for p in tool.body_params
                 },
+                "required": [p.name for p in tool.body_params if p.required],
             },
-        }
+        },
+        "response_timeout_secs": TOOL_TIMEOUT_SECONDS,
     }
+
+
+def tools_registry(
+    *, slug: str, tool_names: list[str], existing: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """`tools.json` — the registry `elevenlabs tools push` reads.
+
+    **Merges rather than overwrites.** `tools push` writes the id it gets back into this file,
+    and an entry without an id is a *create*. So regenerating this blindly on every `make voice`
+    — which happens every time the tunnel URL changes — would mint seven fresh tools each run
+    and orphan the previous seven. Existing ids are matched by config path and carried over.
+    """
+    known: dict[str, str] = {
+        entry["config"]: entry["id"]
+        for entry in (existing or {}).get("tools", [])
+        if entry.get("config") and entry.get("id")
+    }
+
+    tools: list[dict[str, Any]] = []
+    for name in tool_names:
+        config = f"tool_configs/{slug}-{name}.json"
+        entry: dict[str, Any] = {"type": "webhook", "config": config}
+        if config in known:
+            entry["id"] = known[config]
+        tools.append(entry)
+    return {"tools": tools}
+
+
+def tool_ids_from_registry(registry: dict[str, Any] | None) -> list[str]:
+    """The ids `tools push` has recorded, for attaching to the agent."""
+    return [e["id"] for e in (registry or {}).get("tools", []) if e.get("id")]
 
 
 def tool_payloads(
@@ -264,6 +305,7 @@ def agent_config(
     first_message: str,
     llm: str,
     keywords: list[str],
+    tool_ids: list[str],
     language: str = "sv",
 ) -> dict[str, Any]:
     """The contents of `agent_configs/<slug>.json`.
@@ -284,6 +326,9 @@ def agent_config(
                 "prompt": {
                     "prompt": prompt,
                     "llm": llm,
+                    # Empty until `elevenlabs tools push` has run and recorded the ids in
+                    # tools.json. Push the tools first, regenerate, then push the agent.
+                    "tool_ids": tool_ids,
                     "backup_llm_config": {"preference": "override", "order": fallbacks}
                     if fallbacks
                     else {"preference": "default"},
@@ -323,11 +368,24 @@ def agent_config(
     }
 
 
-def agents_registry(*, slug: str, agent_id: str | None) -> dict[str, Any]:
-    """`agents.json` — the registry the official `elevenlabs agents push` reads."""
-    entry: dict[str, Any] = {"config": f"agent_configs/{slug}.json"}
-    if agent_id:
-        entry["id"] = agent_id
+def agents_registry(
+    *, slug: str, agent_id: str | None, existing: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """`agents.json` — the registry `elevenlabs agents push` reads.
+
+    Same merge rule as `tools_registry`: `agents add` writes the new agent's id in here, and
+    losing it on the next regenerate would create a second agent instead of updating the first.
+    An id already in the file wins over the one in `.env`, because the file is what the CLI
+    actually wrote.
+    """
+    config = f"agent_configs/{slug}.json"
+    known = next(
+        (e.get("id") for e in (existing or {}).get("agents", []) if e.get("config") == config),
+        None,
+    )
+    entry: dict[str, Any] = {"config": config}
+    if known or agent_id:
+        entry["id"] = known or agent_id
     return {"agents": [entry]}
 
 

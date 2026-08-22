@@ -1,0 +1,32 @@
+{
+  "tools": [
+    {
+      "type": "webhook",
+      "config": "tool_configs/demo-availability.json"
+    },
+    {
+      "type": "webhook",
+      "config": "tool_configs/demo-book.json"
+    },
+    {
+      "type": "webhook",
+      "config": "tool_configs/demo-reschedule.json"
+    },
+    {
+      "type": "webhook",
+      "config": "tool_configs/demo-cancel.json"
+    },
+    {
+      "type": "webhook",
+      "config": "tool_configs/demo-waitlist.json"
+    },
+    {
+      "type": "webhook",
+      "config": "tool_configs/demo-knowledge.json"
+    },
+    {
+      "type": "webhook",
+      "config": "tool_configs/demo-escalate.json"
+    }
+  ]
+}
