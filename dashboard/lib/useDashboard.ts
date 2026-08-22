@@ -40,6 +40,11 @@ const RESHAPES_THE_BOARD = new Set([
 const MAX_FEED = 80;
 const RECONNECT_MIN_MS = 500;
 const RECONNECT_MAX_MS = 10_000;
+// Events arrive in bursts — an expiring offer emits refill_offer_expired, refill_sms_sent and
+// sometimes refill_cascade_ended within the same tick. Refetching per event fired a snapshot
+// query for each of them, in parallel, which is visible in the API log as eight identical
+// requests in the same instant. One refetch per burst is all the UI needs.
+const REFRESH_DEBOUNCE_MS = 250;
 
 export type Connection = "connecting" | "live" | "reconnecting";
 
@@ -63,6 +68,7 @@ export function useDashboard(clinicId: string, initial: DashState): Dashboard {
 
   const lastEventId = useRef(initial.last_event_id);
   const socketRef = useRef<WebSocket | null>(null);
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryRef = useRef(RECONNECT_MIN_MS);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closedByUs = useRef(false);
@@ -106,7 +112,10 @@ export function useDashboard(clinicId: string, initial: DashState): Dashboard {
             : [event, ...current].slice(0, MAX_FEED),
         );
 
-        if (RESHAPES_THE_BOARD.has(event.type)) void refresh();
+        if (RESHAPES_THE_BOARD.has(event.type)) {
+          if (refreshTimer.current) clearTimeout(refreshTimer.current);
+          refreshTimer.current = setTimeout(() => void refresh(), REFRESH_DEBOUNCE_MS);
+        }
       };
 
       socket.onclose = () => {
@@ -126,6 +135,7 @@ export function useDashboard(clinicId: string, initial: DashState): Dashboard {
     return () => {
       closedByUs.current = true;
       if (timerRef.current) clearTimeout(timerRef.current);
+      if (refreshTimer.current) clearTimeout(refreshTimer.current);
       socketRef.current?.close();
     };
   }, [clinicId, refresh]);
