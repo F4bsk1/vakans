@@ -327,6 +327,21 @@ visit" — where paraphrasing is harmless and writing a tool would be silly.
 
 ---
 
+### Data residency — check this, it is a charter item
+
+```bash
+elevenlabs auth whoami
+```
+
+If it says `Residency: Global`, your conversations and transcripts are **not** pinned to the EU.
+Fine for a demo with fabricated patients, and exactly the thing that has to change before a
+pilot touches a real one (charter §2). ElevenLabs sells EU residency; `elevenlabs auth residency`
+switches the CLI to it once the workspace has it enabled.
+
+Worth knowing now rather than discovering it in a procurement conversation.
+
+---
+
 ## 9. Constraints — what you cannot do, no matter how you configure it
 
 1. **No live transcript.** You only ever see the arguments the model puts in a tool call. See §2.

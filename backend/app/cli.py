@@ -269,18 +269,28 @@ def voice(
             # The order matters and is not obvious: tools must exist before the agent can
             # reference them, and their ids only exist after a push. So the first run is a
             # two-pass dance, and every run after that is one command.
-            console.print("\n[bold]Next:[/]  cd elevenlabs")
+            # Each line carries the `cd` it needs. The Makefile lives in the repo root and their
+            # CLI only works inside `elevenlabs/`, so a bare `make voice` in the middle of the
+            # sequence fails with "No rule to make target".
+            console.print("\n[bold]Next:[/]")
             if not tool_ids:
-                console.print("  1. [bold]elevenlabs tools push[/]      creates the 7 tools")
-                console.print(f"  2. [bold]make voice slug={slug}[/]      picks up their new ids")
+                console.print("  1. [bold]cd elevenlabs && elevenlabs tools push[/]")
+                console.print(f"  2. [bold]cd .. && make voice slug={slug}[/]   picks up the ids")
                 console.print(
-                    f'  3. [bold]elevenlabs agents add "{clinic.name}" '
+                    f'  3. [bold]cd elevenlabs && elevenlabs agents add "{clinic.name}" '
                     f"--from-file agent_configs/{slug}.json[/]"
+                )
+                console.print(
+                    "     [dim]already have an agent? run `elevenlabs agents list` first — "
+                    "`add` creates a second one[/]"
                 )
             else:
                 console.print(f"  tools linked: [green]{len(tool_ids)}[/]/7")
-                console.print("  [bold]elevenlabs tools push[/]")
-                console.print("  [bold]elevenlabs agents push --dry-run[/] then without it")
+                console.print("  [bold]cd elevenlabs && elevenlabs tools push[/]")
+                console.print(
+                    "  [bold]cd elevenlabs && elevenlabs agents push --dry-run[/] "
+                    "then without --dry-run"
+                )
 
     asyncio.run(_run())
 
