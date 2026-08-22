@@ -85,6 +85,11 @@ class Settings(BaseSettings):
     # creates. Their CLI reads its own credential from ELEVENLABS_API_KEY, so we do not hold
     # an ElevenLabs key at all any more.
     elevenlabs_agent_id: str | None = None
+    # Which model runs the conversation. One env var rather than a code change, because the
+    # right answer here is found by making calls and listening: a stronger model reasons better
+    # about a loose prompt, a faster one keeps turns inside the 1.5 s budget. Sonnet is the
+    # balance; try claude-haiku-4-5 if turns feel slow, claude-opus-4-7 if it feels stupid.
+    elevenlabs_llm: str = "claude-sonnet-4-5"
     # Where the voice platform reaches this API. The tunnel URL in development.
     public_base_url: str = "http://localhost:8000"
 

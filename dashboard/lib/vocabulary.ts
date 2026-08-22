@@ -87,7 +87,11 @@ export function describeEvent(type: string, payload: Record<string, unknown>): s
     case "slot_refilled":
       return `Luckan fylld av ${p.patient_name ?? "en patient"} — ${p.booking_ref ?? ""}`;
     case "escalation":
-      return `Eskalerad till människa: ${p.reason ?? ""}`;
+      return p.reason === "missed_medical_red_flag"
+        ? `Efterkontroll: medicinsk flagga som agenten missade (${p.matched ?? ""})`
+        : `Eskalerad till människa: ${p.reason ?? ""}`;
+    case "call_transcript":
+      return `Samtal avslutat — ${p.caller_turns ?? 0} repliker från kunden`;
     case "sms_sent":
       return "SMS skickat";
     case "sim_reset":

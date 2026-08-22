@@ -37,6 +37,7 @@ const GLYPH: Record<string, string> = {
   refill_cascade_ended: "—",
   slot_refilled: "✓",
   escalation: "!",
+  call_transcript: "☎",
   sms_sent: "✉",
 };
 

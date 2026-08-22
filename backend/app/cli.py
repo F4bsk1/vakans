@@ -200,7 +200,15 @@ def voice(
             _write_json(
                 cfg_dir / "agent_configs" / f"{slug}.json",
                 elevenlabs.agent_config(
-                    clinic_name=clinic.name, prompt=prompt, first_message=greeting
+                    clinic_name=clinic.name,
+                    prompt=prompt,
+                    first_message=greeting,
+                    llm=settings.elevenlabs_llm,
+                    keywords=elevenlabs.asr_keywords(
+                        clinic_name=clinic.name,
+                        service_names=[s.name for s in profile.services if s.bookable],
+                        staff_names=[m.name for m in profile.staff],
+                    ),
                 ),
             )
             for payload in elevenlabs.tool_payloads(base_url=public, clinic_id=clinic.id):
@@ -225,6 +233,7 @@ def voice(
             )
 
             console.print(f"[green]Config as code[/] -> {cfg_dir}/  ({len(prompt)} char prompt)")
+            console.print(f"  model: [bold]{settings.elevenlabs_llm}[/]")
             console.print(f"[green]Setup sheet[/]    -> {out_dir}/elevenlabs-agent.md")
 
             if public.startswith("http://localhost"):

@@ -17,9 +17,11 @@ from a scraped clinic website. That part is the product:
 
     clinic website -> ingestion -> clinic_profile -> prompt + 7 tools -> elevenlabs/*.json
 
-**What we emit and what we leave alone.** Only the prompt, the first message, the language and
-the tools. No `llm`, no `tts`, no `turn` — those are chosen by ear in the dashboard, and a
-generated file must not silently overwrite a decision made by listening.
+**What we emit and what we leave alone.** Everything that *follows from the clinic's data or
+from Swedish*: the prompt, the tools, the ASR keyword list, the backchannel terms that must not
+count as interruptions, the filler line while a tool runs, and number normalisation. Not
+`voice_id` — which voice a clinic wants is decided by listening, and a deploy must never
+overwrite an ear.
 """
 
 from __future__ import annotations
@@ -179,22 +181,123 @@ def tool_payloads(
     return [tool_payload(t) for t in _tools(base_url, clinic_id, token_ref)]
 
 
-def agent_config(
-    *, clinic_name: str, prompt: str, first_message: str, language: str = "sv"
-) -> dict[str, Any]:
-    """The contents of `agent_configs/<slug>.json`, and the body of an agent PATCH.
+# Swedish backchannel. Swedes say these constantly *while listening*, and each one currently
+# stops the agent mid-sentence. `interruption_ignore_terms` uses case-insensitive exact matching,
+# so these only suppress a turn when the whole utterance is one of them — a caller who actually
+# wants to interrupt says more than "mm".
+SWEDISH_BACKCHANNEL: tuple[str, ...] = (
+    "mm",
+    "mhm",
+    "hmm",
+    "ja",
+    "jaa",
+    "javisst",
+    "jaha",
+    "jajj",
+    "okej",
+    "ok",
+    "precis",
+    "absolut",
+    "visst",
+    "aha",
+    "just det",
+    "tack",
+    "toppen",
+)
 
-    Note what is absent: no `llm`, no `tts`, no `turn`. Those are chosen by ear in the dashboard
-    and a push must not overwrite them.
+# Said while a tool call is in flight. Silence reads as "it broke"; "ett ögonblick" reads as a
+# receptionist looking something up. This buys perceived latency without being faster.
+SOFT_TIMEOUT_SECONDS = 1.6
+FILLER_MESSAGES: tuple[str, ...] = (
+    "Ett ögonblick, jag kollar.",
+    "Jag tittar efter.",
+    "Ska bara se här.",
+)
+
+# Words worth boosting in speech-to-text. Stop words would dilute the boost, so they are cut.
+_KEYWORD_STOPWORDS = frozenset(
+    ("och", "eller", "för", "med", "utan", "per", "av", "en", "ett", "den", "det", "min", "max")
+)
+MAX_ASR_KEYWORDS = 100
+
+
+def asr_keywords(
+    *, clinic_name: str, service_names: list[str], staff_names: list[str]
+) -> list[str]:
+    """Vocabulary to bias the Swedish transcriber towards.
+
+    The highest-value setting on the platform for this product, and the cheapest: every
+    mis-transcribed "naprapat" is a failed call, and the fix is a list of words we already have
+    in the reviewed clinic profile.
+
+    Practitioner names go in whole *and* split, because a caller says "Johanna" far more often
+    than "Johanna Lindqvist". Service names are split into their distinctive words for the same
+    reason — nobody asks for a "Klassisk massage 60 min", they ask for a massage.
+    """
+    words: list[str] = []
+    for name in [clinic_name, *staff_names]:
+        words.append(name)
+        words.extend(name.split())
+    for service in service_names:
+        words.extend(service.split())
+
+    seen: dict[str, None] = {}
+    for word in words:
+        cleaned = word.strip(" .,–-").strip()
+        if len(cleaned) < 3 or cleaned.lower() in _KEYWORD_STOPWORDS or cleaned.isdigit():
+            continue
+        seen.setdefault(cleaned, None)
+    return list(seen)[:MAX_ASR_KEYWORDS]
+
+
+def agent_config(
+    *,
+    clinic_name: str,
+    prompt: str,
+    first_message: str,
+    llm: str,
+    keywords: list[str],
+    language: str = "sv",
+) -> dict[str, Any]:
+    """The contents of `agent_configs/<slug>.json`.
+
+    We generate every setting that *follows from the clinic's data or from Swedish*, and none of
+    the settings that are a matter of taste. Concretely: `voice_id` is absent, because which
+    voice a clinic wants is decided by listening and a deploy must never overwrite that. The
+    ASR keywords, the backchannel list and the filler messages are not taste — they are the same
+    for any Swedish clinic, or derived from this one's own profile.
     """
     return {
         "name": clinic_name,
         "conversation_config": {
             "agent": {
-                "prompt": {"prompt": prompt},
+                "prompt": {"prompt": prompt, "llm": llm},
                 "first_message": first_message,
                 "language": language,
-            }
+            },
+            "asr": {"keywords": keywords},
+            "turn": {
+                "interruption_ignore_terms": list(SWEDISH_BACKCHANNEL),
+                # Their curated defaults on top of ours, rather than instead of.
+                "merge_with_default_ignore_terms": True,
+                "soft_timeout_config": {
+                    "timeout_seconds": SOFT_TIMEOUT_SECONDS,
+                    "message": FILLER_MESSAGES[0],
+                    "additional_soft_timeout_messages": list(FILLER_MESSAGES[1:]),
+                    "randomize_fillers": True,
+                    # One filler per response. Stacking them sounds like stalling.
+                    "max_soft_timeouts_per_generation": 1,
+                    # Never fill during the greeting — the AI disclosure must land cleanly.
+                    "disable_until_first_user_message": True,
+                },
+            },
+            "tts": {
+                # "elevenlabs", not the default "system_prompt". The default asks the *model* to
+                # rewrite numbers as words before speaking, which means it edits our prices on
+                # the way out — exactly the thing every other decision here prevents. This one
+                # normalises after the model, so "895 kronor" is still the number we sent.
+                "text_normalisation_type": "elevenlabs",
+            },
         },
     }
 

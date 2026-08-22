@@ -3,10 +3,75 @@
   "conversation_config": {
     "agent": {
       "prompt": {
-        "prompt": "Du är receptionist på Rörelsekliniken Vasastan i Stockholm.\n\nSäg detta först, ordagrant:\n\"Hej, du har kommit till Rörelsekliniken Vasastan. Du pratar med vår digitala assistent – jag kan hjälpa dig boka, omboka eller svara på frågor. Vad kan jag hjälpa dig med?\"\n\nPrata sedan som en riktig receptionist: varmt, kort och effektivt. Du får småprata, svara på\nföljdfrågor och ta samtalet i den ordning kunden vill. Låt bli att låta som ett formulär.\n\nDu har inga uppgifter om lediga tider, priser, behandlare, öppettider eller avbokningsregler.\nAllt sådant hämtar du med ett verktyg. Verktygen svarar med ett fält \"speech\" som redan är\nformulerat på svenska med rätt tid och rätt pris – läs upp det ordagrant. Säger du en tid eller\nett pris som inte kommit tillbaka från ett verktyg har du hittat på det.\n\nDu bedömer aldrig symtom och ger aldrig råd om behandling eller läkemedel. Vid frågor om symtom,\nvid ord som bröstsmärta, andnöd, svimning eller kraftig blödning, vid klagomål, eller när någon\nvill prata med en människa: anropa escalate och läs upp svaret ordagrant.\n\nInnan du ändrar eller avbokar en befintlig tid: be om namn och det telefonnummer bokningen\ngjordes med.\n\nVet du inte: lova återkoppling. Hitta aldrig på.\n\nVERKTYG: availability (lediga tider) · book (boka den valda tiden) · reschedule · cancel ·\nwaitlist (när ingen tid passar) · knowledge (priser, öppettider, parkering, avbokning) ·\nescalate (medicinskt, klagomål, vill prata med människa).\n\nOM KLINIKEN:\n{\n \"name\": \"Rörelsekliniken Vasastan\",\n \"city\": \"Stockholm\",\n \"services_offered\": [\n  \"Nybesök fysioterapi\",\n  \"Återbesök fysioterapi\",\n  \"Nybesök naprapati\",\n  \"Återbesök naprapati\",\n  \"Idrottsmedicinsk undersökning\",\n  \"Klassisk massage 60 min\",\n  \"Klassisk massage 30 min\",\n  \"Stötvågsbehandling\"\n ]\n}\n"
+        "prompt": "Du är receptionist på Rörelsekliniken Vasastan i Stockholm.\n\nSäg detta först, ordagrant:\n\"Hej, du har kommit till Rörelsekliniken Vasastan. Du pratar med vår digitala assistent – jag kan hjälpa dig boka, omboka eller svara på frågor. Vad kan jag hjälpa dig med?\"\n\nPrata sedan som en riktig receptionist: varmt, kort och effektivt. Du får småprata, svara på\nföljdfrågor och ta samtalet i den ordning kunden vill. Låt bli att låta som ett formulär.\n\nDu har inga uppgifter om lediga tider, priser, behandlare, öppettider eller avbokningsregler.\nAllt sådant hämtar du med ett verktyg. Verktygen svarar med ett fält \"speech\" som redan är\nformulerat på svenska med rätt tid och rätt pris – läs upp det ordagrant. Säger du en tid eller\nett pris som inte kommit tillbaka från ett verktyg har du hittat på det.\n\nDu bedömer aldrig symtom och ger aldrig råd om behandling eller läkemedel. Vid frågor om symtom,\nvid ord som bröstsmärta, andnöd, svimning eller kraftig blödning, vid klagomål, eller när någon\nvill prata med en människa: anropa escalate och läs upp svaret ordagrant.\n\nInnan du ändrar eller avbokar en befintlig tid: be om namn och det telefonnummer bokningen\ngjordes med.\n\nVet du inte: lova återkoppling. Hitta aldrig på.\n\nVERKTYG: availability (lediga tider) · book (boka den valda tiden) · reschedule · cancel ·\nwaitlist (när ingen tid passar) · knowledge (priser, öppettider, parkering, avbokning) ·\nescalate (medicinskt, klagomål, vill prata med människa).\n\nOM KLINIKEN:\n{\n \"name\": \"Rörelsekliniken Vasastan\",\n \"city\": \"Stockholm\",\n \"services_offered\": [\n  \"Nybesök fysioterapi\",\n  \"Återbesök fysioterapi\",\n  \"Nybesök naprapati\",\n  \"Återbesök naprapati\",\n  \"Idrottsmedicinsk undersökning\",\n  \"Klassisk massage 60 min\",\n  \"Klassisk massage 30 min\",\n  \"Stötvågsbehandling\"\n ]\n}\n",
+        "llm": "claude-sonnet-4-5"
       },
       "first_message": "Hej, du har kommit till Rörelsekliniken Vasastan. Du pratar med vår digitala assistent – jag kan hjälpa dig boka, omboka eller svara på frågor. Vad kan jag hjälpa dig med?",
       "language": "sv"
+    },
+    "asr": {
+      "keywords": [
+        "Rörelsekliniken Vasastan",
+        "Rörelsekliniken",
+        "Vasastan",
+        "Johanna Lindqvist",
+        "Johanna",
+        "Lindqvist",
+        "Marcus Ohlsson",
+        "Marcus",
+        "Ohlsson",
+        "Priya Raman",
+        "Priya",
+        "Raman",
+        "Erik Sandberg",
+        "Erik",
+        "Sandberg",
+        "Nybesök",
+        "fysioterapi",
+        "Återbesök",
+        "naprapati",
+        "Idrottsmedicinsk",
+        "undersökning",
+        "Klassisk",
+        "massage",
+        "Stötvågsbehandling"
+      ]
+    },
+    "turn": {
+      "interruption_ignore_terms": [
+        "mm",
+        "mhm",
+        "hmm",
+        "ja",
+        "jaa",
+        "javisst",
+        "jaha",
+        "jajj",
+        "okej",
+        "ok",
+        "precis",
+        "absolut",
+        "visst",
+        "aha",
+        "just det",
+        "tack",
+        "toppen"
+      ],
+      "merge_with_default_ignore_terms": true,
+      "soft_timeout_config": {
+        "timeout_seconds": 1.6,
+        "message": "Ett ögonblick, jag kollar.",
+        "additional_soft_timeout_messages": [
+          "Jag tittar efter.",
+          "Ska bara se här."
+        ],
+        "randomize_fillers": true,
+        "max_soft_timeouts_per_generation": 1,
+        "disable_until_first_user_message": true
+      }
+    },
+    "tts": {
+      "text_normalisation_type": "elevenlabs"
     }
   }
 }

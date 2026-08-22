@@ -20,7 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.db import get_sessionmaker
 from app.refill.worker import RefillWorker
-from app.routers import agent, dash, health, sim, sms
+from app.routers import agent, calls, dash, health, sim, sms
 
 logger = logging.getLogger("vakans")
 
@@ -82,6 +82,7 @@ def create_app() -> FastAPI:
     app.include_router(sim.router)
     app.include_router(dash.router)
     app.include_router(sms.router)
+    app.include_router(calls.router)
     return app
 
 
