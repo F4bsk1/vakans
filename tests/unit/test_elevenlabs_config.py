@@ -7,12 +7,15 @@ had inferred. These tests pin what that source showed.
 
 from __future__ import annotations
 
+import json
 import uuid
 
 from app.voice.elevenlabs import (
     agent_config,
     agents_registry,
     asr_keywords,
+    redact,
+    secret_ref,
     tool_ids_from_registry,
     tool_payloads,
     tools_registry,
@@ -23,8 +26,8 @@ BASE = "https://example.trycloudflare.com"
 NAMES = ["availability", "book", "cancel"]
 
 
-def payloads():
-    return tool_payloads(base_url=BASE, clinic_id=CLINIC)
+def payloads(token_ref="tok_literal"):
+    return tool_payloads(base_url=BASE, clinic_id=CLINIC, token_ref=token_ref)
 
 
 # --- tool files ---------------------------------------------------------------------------
@@ -45,9 +48,7 @@ def test_every_tool_points_at_this_clinic_and_carries_the_token() -> None:
         schema = payload["api_schema"]
         assert schema["url"].startswith(f"{BASE}/agent/{CLINIC}/")
         assert schema["method"] == "POST"
-        # The token is a workspace-secret reference, never the literal value — these files are
-        # generated into a repo.
-        assert schema["request_headers"]["X-Agent-Token"] == "{{secret__agent_token}}"
+        assert schema["request_headers"]["X-Agent-Token"] == "tok_literal"
 
 
 def test_required_parameters_are_marked_required() -> None:
@@ -56,6 +57,24 @@ def test_required_parameters_are_marked_required() -> None:
 
     assert set(schema["required"]) == {"slot_id", "service_id", "patient_name", "phone"}
     assert set(schema["properties"]) == set(schema["required"])
+
+
+def test_a_workspace_secret_is_referenced_as_an_object_not_a_template() -> None:
+    """There is no header template syntax. An earlier version emitted the *string*
+    "{{secret__agent_token}}", which went out as a literal header value — so every tool call
+    returned 401 while the agent improvised around the failure."""
+    header = payloads(secret_ref("sec_123"))[0]["api_schema"]["request_headers"]["X-Agent-Token"]
+
+    assert header == {"secret_id": "sec_123"}
+
+
+def test_the_shareable_json_never_carries_the_literal_token() -> None:
+    """`redact` exists because the markdown sheet and the JSON dump are meant to be pasted
+    into a dashboard or a chat."""
+    masked = redact(payloads("supersecret")[0])
+
+    assert masked["api_schema"]["request_headers"]["X-Agent-Token"] == "<VAKANS_AGENT_TOKEN>"
+    assert "supersecret" not in json.dumps(masked)
 
 
 # --- registries: the id-preserving bit ------------------------------------------------------

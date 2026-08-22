@@ -222,7 +222,7 @@ tunnel restart and would otherwise put seven modified files in `git status` all 
 |---|---|
 | Agent invents times, sounds plausible, nothing in the event log | Tools are failing. Check the tunnel URL matches what is in ElevenLabs. |
 | "Ett fel uppstod" in the ElevenLabs widget | The agent id or the signed URL, not your code. |
-| Tools return 401 | `VAKANS_AGENT_TOKEN` in `.env` differs from the workspace secret in ElevenLabs. |
+| Tools return 401 | The token in `elevenlabs/tool_configs/*.json` is stale. Re-run `make voice` and `elevenlabs tools push`. |
 | Cascade sends SMS #1 then stops | The refill worker is not running. It starts with `make run`; check the log for "refill worker started". |
 | Dashboard says "Återansluter" | API restarted. It reconnects on its own with backoff. |
 | Dashboard is empty | `make seed` has not been run, or the API is down. |

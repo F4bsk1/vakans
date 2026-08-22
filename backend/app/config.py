@@ -90,6 +90,11 @@ class Settings(BaseSettings):
     # about a loose prompt, a faster one keeps turns inside the 1.5 s budget. Sonnet is the
     # balance; try claude-haiku-4-5 if turns feel slow, claude-opus-4-7 if it feels stupid.
     elevenlabs_llm: str = "claude-sonnet-4-5"
+    # Optional. If a workspace secret has been created in ElevenLabs, put its **id** here and
+    # the generated tools reference it instead of carrying the literal token. Left unset, the
+    # token is written into elevenlabs/tool_configs/ — which is gitignored, and holds the same
+    # value .env already does on the same disk.
+    elevenlabs_secret_id: str | None = None
     # Where the voice platform reaches this API. The tunnel URL in development.
     public_base_url: str = "http://localhost:8000"
 

@@ -51,10 +51,16 @@ class WebhookTool:
     method: str
     url: str
     body_params: list[BodyParam] = field(default_factory=list)
-    headers: dict[str, str] = field(default_factory=dict)
+    headers: dict[str, Any] = field(default_factory=dict)
 
 
-def _tools(base_url: str, clinic_id: UUID, token_ref: str) -> list[WebhookTool]:
+# A header value may be a literal string, or one of ElevenLabs' reference objects. Verified
+# against their tools API: `{"secret_id": "..."}` is the workspace-secret form — note **id**,
+# not name, so it only exists after the secret has been created in their dashboard.
+TokenRef = str | dict[str, str]
+
+
+def _tools(base_url: str, clinic_id: UUID, token_ref: TokenRef) -> list[WebhookTool]:
     root = f"{base_url.rstrip('/')}/agent/{clinic_id}"
     headers = {AGENT_TOKEN_HEADER: token_ref, "Content-Type": "application/json"}
 
@@ -215,16 +221,30 @@ def tool_ids_from_registry(registry: dict[str, Any] | None) -> list[str]:
     return [e["id"] for e in (registry or {}).get("tools", []) if e.get("id")]
 
 
-def tool_payloads(
-    *, base_url: str, clinic_id: UUID, token_ref: str = "{{secret__agent_token}}"
-) -> list[dict[str, Any]]:
+def secret_ref(secret_id: str) -> dict[str, str]:
+    """A workspace-secret reference. Takes the secret's **id**, not its name."""
+    return {"secret_id": secret_id}
+
+
+def tool_payloads(*, base_url: str, clinic_id: UUID, token_ref: TokenRef) -> list[dict[str, Any]]:
     """All seven tools.
 
-    `token_ref` defaults to a workspace-secret placeholder rather than the literal token: store
-    the value once in ElevenLabs and reference it, so the shared secret is not copied into seven
-    tool configs (or into a file that reaches git).
+    `token_ref` is either the literal token or `secret_ref(<id>)`. An earlier version defaulted
+    to the string `{{secret__agent_token}}`, which is not a thing — ElevenLabs has no template
+    syntax for headers, so that went out as a literal header value and every tool call came back
+    401 while the agent cheerfully improvised. There is no safe default here, which is why this
+    argument is now required.
     """
     return [tool_payload(t) for t in _tools(base_url, clinic_id, token_ref)]
+
+
+def redact(payload: dict[str, Any]) -> dict[str, Any]:
+    """A copy with the token masked, for anything a human might paste somewhere."""
+    masked = json.loads(json.dumps(payload))
+    headers = masked.get("api_schema", {}).get("request_headers", {})
+    if isinstance(headers.get(AGENT_TOKEN_HEADER), str):
+        headers[AGENT_TOKEN_HEADER] = "<VAKANS_AGENT_TOKEN>"
+    return masked
 
 
 # Swedish backchannel. Swedes say these constantly *while listening*, and each one currently
@@ -414,14 +434,14 @@ def as_markdown(*, base_url: str, clinic_id: UUID, clinic_name: str) -> str:
         "",
         "## Before you start",
         "",
-        "1. Store the agent token as a **workspace secret** named `agent_token` "
-        "(value: `VAKANS_AGENT_TOKEN` from your .env). Do not paste it into each tool.",
+        "1. Each tool sends `VAKANS_AGENT_TOKEN` in a header. `vakans voice` writes the real "
+        "value into `elevenlabs/tool_configs/` (gitignored); paste it here by hand.",
         f"2. Every tool below needs the header `{AGENT_TOKEN_HEADER}` referencing that secret.",
         "3. All seven are POST and return JSON with a `speech` field — the agent reads that "
         "field aloud verbatim.",
         "",
     ]
-    for t in _tools(base_url, clinic_id, "{{secret__agent_token}}"):
+    for t in _tools(base_url, clinic_id, "<VAKANS_AGENT_TOKEN>"):
         lines += [
             f"## {t.name}",
             "",
@@ -439,6 +459,8 @@ def as_markdown(*, base_url: str, clinic_id: UUID, clinic_name: str) -> str:
 
 
 def as_json(*, base_url: str, clinic_id: UUID) -> str:
-    return json.dumps(
-        tool_payloads(base_url=base_url, clinic_id=clinic_id), ensure_ascii=False, indent=2
+    """Redacted, because this one is meant to be read and pasted around."""
+    payloads = tool_payloads(
+        base_url=base_url, clinic_id=clinic_id, token_ref="<VAKANS_AGENT_TOKEN>"
     )
+    return json.dumps([redact(p) for p in payloads], ensure_ascii=False, indent=2)

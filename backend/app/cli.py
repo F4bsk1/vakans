@@ -225,8 +225,24 @@ def voice(
                 ),
             )
 
+            # The header value: a real secret reference if one is configured, otherwise the
+            # literal token. There is no third option — a placeholder here is sent verbatim and
+            # every tool call comes back 401 while the agent improvises around the failure.
+            if settings.elevenlabs_secret_id:
+                token_ref = elevenlabs.secret_ref(settings.elevenlabs_secret_id)
+            elif settings.agent_token:
+                token_ref = settings.agent_token.get_secret_value()
+            else:
+                console.print(
+                    "[red]VAKANS_AGENT_TOKEN is not set.[/] Generate one with "
+                    "`openssl rand -hex 32` — without it the tools cannot authenticate."
+                )
+                raise typer.Exit(1)
+
             names: list[str] = []
-            for payload in elevenlabs.tool_payloads(base_url=public, clinic_id=clinic.id):
+            for payload in elevenlabs.tool_payloads(
+                base_url=public, clinic_id=clinic.id, token_ref=token_ref
+            ):
                 names.append(payload["name"])
                 _write_json(cfg_dir / "tool_configs" / f"{slug}-{payload['name']}.json", payload)
             _write_json(
@@ -260,11 +276,14 @@ def voice(
                     "\n[yellow]VAKANS_PUBLIC_BASE_URL is still localhost.[/] ElevenLabs cannot "
                     "reach that — start a tunnel and re-run with the public URL."
                 )
-            if settings.agent_token is None:
-                console.print(
-                    "[yellow]VAKANS_AGENT_TOKEN is not set.[/] /agent/* will refuse every "
-                    "request until it is. Generate one: openssl rand -hex 32"
+            console.print(
+                "  auth: "
+                + (
+                    f"workspace secret [bold]{settings.elevenlabs_secret_id}[/]"
+                    if settings.elevenlabs_secret_id
+                    else "token written into tool_configs/ [dim](gitignored)[/]"
                 )
+            )
 
             # The order matters and is not obvious: tools must exist before the agent can
             # reference them, and their ids only exist after a push. So the first run is a
