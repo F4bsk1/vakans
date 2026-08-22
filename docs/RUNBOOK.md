@@ -221,3 +221,129 @@ curl -s -o /dev/null -w '%{http_code}\n' "$(grep '^VAKANS_PUBLIC_BASE_URL=' .env
 
 `200` means ElevenLabs can reach you. Anything else — including no answer — means every tool
 call is failing and the agent is improvising.
+
+---
+
+## 7. Two computers: what is ours, what is theirs
+
+The confusing part of this architecture is that "the agent" is not one thing in one place. It is
+**two computers cooperating**, and almost every question about where to change something is
+really the question "which computer owns this?"
+
+```
+   ElevenLabs' computer                    your Mac
+   ────────────────────                    ────────
+   ears    speech-to-text                  memory   Postgres: slots, bookings,
+   brain   the LLM + your prompt                    patients, waitlist, events
+   mouth   text-to-speech                  hands    the 7 tools: what booking
+   timing  who speaks when                          actually means
+```
+
+They have **none of our code**. What they hold is a *copy* of exactly two things:
+
+1. the system prompt (a block of Swedish text), and
+2. the seven tool definitions (name, description, URL, parameters).
+
+That is the entire contract. Everything else in `backend/` — 1,300 lines of agent logic, the
+refill engine, the database — they never see. They just call a URL and read back the `speech`
+field we return.
+
+**This is why some changes need a push and some do not.** Change what a booking *does* and it
+is live the moment you save the file, because that code runs on your Mac. Change the *prompt*
+and you have to send them the new copy.
+
+### Why the split is drawn there on purpose
+
+Charter D1: the voice platform is the piece most likely to be replaced, because it is a
+US-framed platform and that stops being acceptable the day real patient data is involved.
+Everything of value — the sandbox, the tools, the refill engine, the dashboard — sits below the
+line and survives that swap untouched. Only `voice/elevenlabs.py` and `routers/agent.py` would
+be rewritten.
+
+---
+
+## 8. What you can tune, on each side
+
+### Their side — everything about *how it sounds and listens*
+
+Set in the ElevenLabs dashboard, or in `conversation_config` if you want it in the config file.
+The ones that actually matter for a Swedish clinic:
+
+| Field | What it does | Why it matters here |
+|---|---|---|
+| `tts.voice_id` | which voice | pick by ear, this is not a config decision |
+| `tts.speed`, `tts.stability` | pace and consistency | a receptionist who talks too fast sounds like a robot reading |
+| `tts.text_normalisation_type` | how numbers are spoken | **big one** — decides whether "1195 kr" is read as "tolvhundra" or digit-by-digit |
+| `tts.pronunciation_dictionary_locators` | custom pronunciations | so "naprapat" and practitioner surnames are said correctly |
+| `asr.keywords` | boosts recognition of specific words | **the highest-value knob we are not using.** Feed it the clinic's service names and practitioner names and Swedish clinical vocabulary stops being mis-transcribed |
+| `asr.quality` | transcription precision | |
+| `turn.turn_timeout` | how long it waits for you to finish | too short and it interrupts a hesitant elderly caller |
+| `turn.turn_eagerness` | how quickly it jumps in | |
+| `turn.interruption_ignore_terms` | words that do not count as interrupting | so "mm", "ja", "okej" do not cut the agent off mid-sentence |
+| `turn.soft_timeout_config` | filler while a tool runs | "ett ögonblick…" while our database query returns — hides latency without us being faster |
+| `prompt.llm` | which model | a stronger model needs a shorter prompt |
+| `prompt.temperature` | how varied the phrasing | |
+| `prompt.timezone` | time awareness | |
+| `conversation.max_duration_seconds` | call length cap | |
+
+### Our side — everything about *what is true and what happens*
+
+| What | Where |
+|---|---|
+| What a booking, cancellation or reschedule actually does | `app/agent/tools.py` |
+| The exact Swedish sentence spoken back | `app/agent/speech.py` |
+| The medical boundary backstop | `app/agent/safety.py` |
+| The agent's brief | `app/agent/prompt.py` |
+| The tools' names, descriptions and parameters | `app/voice/elevenlabs.py` |
+| Prices, opening hours, policies | the reviewed `clinic_profile`, from the clinic's own website |
+| The refill cascade, SMS, the dashboard | `app/refill/`, `app/routers/` |
+
+### One place we deliberately did *not* use their feature
+
+ElevenLabs offers a **knowledge base with RAG** — upload documents, the agent retrieves from
+them. We built `knowledge` as a tool instead, answering from the reviewed profile.
+
+The reason is spec §5: *"Fel pris i demo = död affär"*. RAG retrieves a chunk and lets the model
+paraphrase it. For opening hours that is fine; for a price it is a coin flip you take on every
+call. Our version returns one exact sentence, built from a price that a human approved and that
+`scrub_unverified` proved appears verbatim on the clinic's own website.
+
+Worth revisiting for genuinely fuzzy content — treatment descriptions, "what happens at a first
+visit" — where paraphrasing is harmless and writing a tool would be silly.
+
+---
+
+## 9. Constraints — what you cannot do, no matter how you configure it
+
+1. **No live transcript.** You only ever see the arguments the model puts in a tool call. See §2.
+2. **You cannot push anything into a call in progress.** Everything the agent says is a reply to
+   something it decided to ask you.
+3. **The LLM comes from their list** unless you run `prompt.custom_llm` against your own
+   endpoint. That is the escape hatch if an EU-hosted model becomes a requirement.
+4. **Audio and transcripts sit on their platform.** Fine for a demo with fabricated patients;
+   this is the thing that has to change before a pilot handles real ones (charter §2).
+5. **The latency floor is theirs.** ASR, inference and TTS are the bulk of a turn. Our share is
+   the tool round trip, currently well under 100 ms.
+
+---
+
+## 10. If the goal is "the best possible healthcare receptionist"
+
+In the order the effort actually pays off:
+
+1. **`asr.keywords` with the clinic's vocabulary.** Every mis-heard "naprapat" is a failed call,
+   and this is a list of words, not a model change. Highest value for the least work, and we
+   already have the list — it is in the clinic profile.
+2. **`turn.soft_timeout_config`.** A receptionist who says "ett ögonblick" while looking
+   something up sounds human. Silence sounds broken. This buys perceived latency for free.
+3. **`turn.interruption_ignore_terms`** for Swedish backchannel — "mm", "javisst", "okej".
+   Swedes say these constantly while listening, and each one currently stops the agent talking.
+4. **A stronger `prompt.llm`, then re-shorten the prompt.** A scripted prompt is how you
+   compensate for a weaker model. Raise the model and remove the compensation together, not
+   one without the other.
+5. **`tts.text_normalisation_type` and a pronunciation dictionary**, checked against real
+   prices and real surnames.
+6. **The post-call webhook**, so you can read what actually happened instead of guessing.
+
+Note what is *not* on this list: writing more of our own logic. The tools are the part that
+already works.
