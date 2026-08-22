@@ -159,18 +159,16 @@ def list_clinics() -> None:
 def voice(
     slug: str = typer.Option(DEMO_SLUG, help="Clinic to generate the agent config for."),
     base_url: str = typer.Option(None, help="Public URL ElevenLabs will call. Defaults to config."),
-    push: bool = typer.Option(False, "--push", help="Also upload it to ElevenLabs."),
 ) -> None:
-    """Generate the ElevenLabs agent config, and optionally push it.
+    """Generate the ElevenLabs agent config from this clinic's reviewed profile.
 
-    Writes the config twice, on purpose:
+    Writes `elevenlabs/` in the layout `@elevenlabs/cli` reads, plus a markdown sheet under
+    `artifacts/<slug>/` for entering it by hand. Deploying is their CLI's job:
 
-    - `elevenlabs/` in the repo root, in the layout the official `elevenlabs agents push` CLI
-      reads. Git-tracked, so what the agent says is reviewable in a diff.
-    - `artifacts/<slug>/*.md`, a human setup sheet for entering it by hand.
+        cd elevenlabs && elevenlabs agents push --dry-run   # see what would change
+        cd elevenlabs && elevenlabs agents push
 
-    Both are generated from the same clinic profile, so they cannot drift. `--push` uploads via
-    the API without needing their CLI installed; the files stay valid either way.
+    Re-run this whenever the prompt, the tools or the tunnel URL changes.
     """
 
     async def _run() -> None:
@@ -240,34 +238,21 @@ def voice(
                     "request until it is. Generate one: openssl rand -hex 32"
                 )
 
-            if not push:
+            console.print("\nDeploy it with their CLI:")
+            if settings.elevenlabs_agent_id:
+                console.print("  [bold]cd elevenlabs && elevenlabs agents push --dry-run[/]")
+                console.print("  [bold]cd elevenlabs && elevenlabs agents push[/]")
+            else:
+                # No id yet, so `push` has nothing to update. `add --from-file` creates the
+                # agent from our config and records the id it gets back.
                 console.print(
-                    "\nPush it with [bold]--push[/], or with their CLI: "
-                    "[bold]cd elevenlabs && elevenlabs agents push[/]"
+                    f'  [bold]cd elevenlabs && elevenlabs agents add "{clinic.name}" '
+                    f"--from-file agent_configs/{slug}.json[/]"
                 )
-                return
-
-            try:
-                result = await elevenlabs.push(
-                    settings=settings,
-                    clinic_name=clinic.name,
-                    clinic_id=clinic.id,
-                    base_url=public,
-                    prompt=prompt,
-                    first_message=greeting,
+                console.print(
+                    "  [dim]then put the id it prints in VAKANS_ELEVENLABS_AGENT_ID "
+                    "and re-run this[/]"
                 )
-            except elevenlabs.PushError as exc:
-                console.print(f"\n[red]Push failed.[/] {exc}")
-                raise typer.Exit(1) from exc
-
-            console.print(f"\n[bold green]Pushed[/] to agent {result.agent_id}")
-            if result.tools_created:
-                console.print(f"  created: {', '.join(result.tools_created)}")
-            if result.tools_updated:
-                console.print(f"  updated: {', '.join(result.tools_updated)}")
-            console.print(
-                "  [dim]voice, model and turn-taking left untouched — those stay yours[/]"
-            )
 
     asyncio.run(_run())
 

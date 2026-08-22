@@ -81,7 +81,9 @@ class Settings(BaseSettings):
     agent_token: SecretStr | None = None
 
     # --- voice (charter D1: ElevenLabs Agents) --------------------------------------------
-    elevenlabs_api_key: SecretStr | None = None
+    # The agent's id, written into elevenlabs/agents.json so their CLI updates rather than
+    # creates. Their CLI reads its own credential from ELEVENLABS_API_KEY, so we do not hold
+    # an ElevenLabs key at all any more.
     elevenlabs_agent_id: str | None = None
     # Where the voice platform reaches this API. The tunnel URL in development.
     public_base_url: str = "http://localhost:8000"

@@ -23,7 +23,7 @@ temporary public HTTPS address that forwards to your port.
 
 **Its URL changes every time you restart it.** That is the single most common reason a call
 suddenly stops working: the tools in ElevenLabs still point at yesterday's hostname. The fix is
-always the same — copy the new URL, then `make voice-push url=<new-url>`.
+always the same — copy the new URL, then `make voice url=<new-url>` and push.
 
 You do not need the tunnel to develop. Only a real phone call needs it.
 
@@ -84,10 +84,10 @@ This is the question the split makes confusing. It depends entirely on *what* yo
 
 | What you want to change | Edit this | How it goes live |
 |---|---|---|
-| How the agent talks, its personality, its rules | `backend/app/agent/prompt.py` | `make voice-push` |
+| How the agent talks, its personality, its rules | `backend/app/agent/prompt.py` | `make voice` + push |
 | What a tool actually does (booking logic, matching, prices) | `backend/app/agent/tools.py` | **instantly** — it is your server |
 | What the agent says back (Swedish phrasing) | `backend/app/agent/speech.py` | **instantly** |
-| Tool names, descriptions, parameters | `backend/app/voice/elevenlabs.py` | `make voice-push` |
+| Tool names, descriptions, parameters | `backend/app/voice/elevenlabs.py` | `make voice` + push |
 | The medical boundary | `backend/app/agent/safety.py` | **instantly** |
 | Which voice it speaks with | ElevenLabs dashboard | immediately |
 | Which LLM, temperature, turn-taking, interruption | ElevenLabs dashboard | immediately |
@@ -96,9 +96,8 @@ This is the question the split makes confusing. It depends entirely on *what* yo
 you save the file. Anything ElevenLabs needs a *copy* of — the prompt and the tool definitions —
 needs a push.
 
-A push deliberately writes only the prompt, first message, language and tool list. Voice, LLM
-and turn-taking are left alone, because those are decisions you make by ear in their dashboard
-and a deploy should not silently overwrite them.
+What we generate deliberately excludes voice, LLM and turn-taking. Those are decisions you make
+by ear in their dashboard, and a generated file should not silently overwrite them.
 
 ### The prompt is generated, not written
 
@@ -151,26 +150,46 @@ booking, whatever the conversation sounded like.
 
 ---
 
-## 5. Why `make voice-push` rather than the ElevenLabs CLI?
+## 5. Deploying: we generate, their CLI pushes
 
-It is not either/or — `make voice` writes the config in *their* CLI's layout, so both work on
-the same files and cannot disagree:
+`make voice` writes the config; `@elevenlabs/cli` deploys it. We do not do the HTTP — an earlier
+version did, and it was ninety-seven lines duplicating `elevenlabs agents push` that would have
+needed maintaining against their API forever.
 
 ```
 elevenlabs/
   agents.json                    # registry              (tracked in git)
   agent_configs/demo.json        # prompt, first message (tracked in git)
-  tool_configs/demo-*.json       # the 7 webhook tools   (gitignored — see below)
+  tool_configs/demo-*.json       # the 7 webhook tools   (gitignored, see below)
 ```
+
+### One-time setup
 
 ```bash
-make voice-push                              # our CLI, over their REST API
-cd elevenlabs && elevenlabs agents push      # their CLI, same files
+npm install -g @elevenlabs/cli
+elevenlabs auth login                     # reads ELEVENLABS_API_KEY, not a VAKANS_ one
+cd elevenlabs
+elevenlabs agents add "Rörelsekliniken Vasastan" --from-file agent_configs/demo.json
 ```
 
-`make voice-push` is the daily driver for two reasons: it is one fewer tool to install and log
-in to, and it regenerates from the clinic profile — so clinic #2 and #3 need no extra work.
-Their CLI is worth having for versioning and branches.
+`agents add` creates the agent on ElevenLabs and prints its id. Put that in
+`VAKANS_ELEVENLABS_AGENT_ID` in `.env` and re-run `make voice`, so `agents.json` carries the id
+and future pushes *update* instead of creating a second agent.
+
+### Every time after that
+
+```bash
+make voice url=https://<current-tunnel>     # regenerate from the clinic profile
+cd elevenlabs
+elevenlabs agents push --dry-run            # see exactly what would change
+elevenlabs agents push
+elevenlabs tools push
+```
+
+### What we deliberately do not generate
+
+No `llm`, no `tts`, no `turn`. Voice, model and turn-taking are chosen by ear in their dashboard,
+and a generated file must not silently overwrite a decision made by listening.
 
 `tool_configs/` is gitignored because it embeds the cloudflared URL, which changes on every
 tunnel restart and would otherwise put seven modified files in `git status` all day.
