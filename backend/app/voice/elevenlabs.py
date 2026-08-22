@@ -214,6 +214,13 @@ FILLER_MESSAGES: tuple[str, ...] = (
     "Ska bara se här.",
 )
 
+# If the primary model stalls, cascade to a faster one rather than leaving dead air. Four
+# seconds is their default and is a very long silence on a phone call; three is the compromise
+# against their two-second floor. The fallbacks are chosen for latency, not for reasoning — by
+# the time we are cascading, an answer beats a better answer.
+BACKUP_LLM_ORDER: tuple[str, ...] = ("claude-haiku-4-5", "gemini-2.5-flash")
+CASCADE_TIMEOUT_SECONDS = 3.0
+
 # Words worth boosting in speech-to-text. Stop words would dilute the boost, so they are cut.
 _KEYWORD_STOPWORDS = frozenset(
     ("och", "eller", "för", "med", "utan", "per", "av", "en", "ett", "den", "det", "min", "max")
@@ -267,13 +274,27 @@ def agent_config(
     ASR keywords, the backchannel list and the filler messages are not taste — they are the same
     for any Swedish clinic, or derived from this one's own profile.
     """
+    # Never list the primary model as its own fallback.
+    fallbacks = [m for m in BACKUP_LLM_ORDER if m != llm]
+
     return {
         "name": clinic_name,
         "conversation_config": {
             "agent": {
-                "prompt": {"prompt": prompt, "llm": llm},
+                "prompt": {
+                    "prompt": prompt,
+                    "llm": llm,
+                    "backup_llm_config": {"preference": "override", "order": fallbacks}
+                    if fallbacks
+                    else {"preference": "default"},
+                    "cascade_timeout_seconds": CASCADE_TIMEOUT_SECONDS,
+                },
                 "first_message": first_message,
                 "language": language,
+                # The opening line is the EU AI Act art. 50 disclosure. Left interruptible, an
+                # eager caller talks over it and it legally did not happen — so this is a legal
+                # requirement expressed as a config flag, not a politeness setting.
+                "disable_first_message_interruptions": True,
             },
             "asr": {"keywords": keywords},
             "turn": {
