@@ -160,6 +160,12 @@ def test_numbers_are_normalised_after_the_model_not_by_it() -> None:
     assert config()["conversation_config"]["tts"]["text_normalisation_type"] == "elevenlabs"
 
 
+def test_the_tts_model_supports_swedish() -> None:
+    """Not cosmetic: ElevenLabs rejects the whole config with "Non-english Agents must use
+    turbo or flash v2_5", and the default is English-only. Found by a failed push."""
+    assert config()["conversation_config"]["tts"]["model_id"] == "eleven_flash_v2_5"
+
+
 def test_the_voice_is_never_generated() -> None:
     """Chosen by listening. A deploy must not overwrite an ear."""
     assert "voice_id" not in config()["conversation_config"]["tts"]

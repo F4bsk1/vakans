@@ -88,6 +88,7 @@
       }
     },
     "tts": {
+      "model_id": "eleven_flash_v2_5",
       "text_normalisation_type": "elevenlabs"
     }
   }

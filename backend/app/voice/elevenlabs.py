@@ -149,6 +149,11 @@ def _tools(base_url: str, clinic_id: UUID, token_ref: str) -> list[WebhookTool]:
 # the request crosses a tunnel; their own template uses 30 and there is no reason to be tighter.
 TOOL_TIMEOUT_SECONDS = 30
 
+# Charter D1 picked Flash v2.5 for TTS before anything else was decided. It is also the only
+# sensible option: the API refuses a Swedish agent on anything but flash/turbo v2.5, and turbo
+# v2.5 is deprecated in favour of it.
+TTS_MODEL_ID = "eleven_flash_v2_5"
+
 
 def tool_payload(tool: WebhookTool) -> dict[str, Any]:
     """One tool, in the shape `elevenlabs tools push` reads from a `tool_configs/*.json` file.
@@ -358,6 +363,11 @@ def agent_config(
                 },
             },
             "tts": {
+                # Required, not optional: ElevenLabs rejects a non-English agent that does not
+                # use flash or turbo v2.5 ("Non-english Agents must use turbo or flash v2_5"),
+                # and the default is an English-only model. Flash v2.5 is also the charter's
+                # choice — ~75 ms, 32 languages including Swedish, and turbo v2.5 is deprecated.
+                "model_id": TTS_MODEL_ID,
                 # "elevenlabs", not the default "system_prompt". The default asks the *model* to
                 # rewrite numbers as words before speaking, which means it edits our prices on
                 # the way out — exactly the thing every other decision here prevents. This one
