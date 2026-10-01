@@ -1,6 +1,6 @@
 # PROJECT.md — Vakans (working name): AI reception + capacity matching for Swedish clinics
 
-> Purpose of this file: single source of truth for Claude Code sessions. Read this before writing any code.
+> Purpose of this file: single source of truth for the project. Read this before writing any code.
 > Last updated: 2026-08-12. Owner: Fabian + co-founder.
 
 ## 1. What we are building (context)

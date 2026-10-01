@@ -32,3 +32,16 @@ App on http://localhost:8000 (`/healthz`, `/docs`). Postgres on `localhost:55432
     backend/alembic/     migrations
     dashboard/           Next.js (step 5)
     docs/                charter, build spec, schema notes
+
+## Stack
+
+- FastAPI, SQLAlchemy 2 and Alembic on Postgres 16 (Docker locally, Supabase EU for demos)
+- Pydantic AI for the typed agent tools; ElevenLabs Agents for the voice layer
+- Playwright, trafilatura and instructor for clinic-website ingestion
+- 46elks for SMS, with a `fake` provider for both LLM and SMS so the whole suite runs offline
+- Next.js dashboard with plain CSS Modules
+
+## Tests
+
+    make test                      # ruff + pytest; integration tests need `make db-up`
+    uv run pytest tests/unit -q    # unit tests only, no database

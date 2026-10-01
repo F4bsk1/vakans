@@ -1,39 +1,39 @@
 {
-  "tools": [
-    {
-      "type": "webhook",
-      "config": "tool_configs/demo-availability.json",
-      "id": "tool_7301m0njbx0per4vzpacv9ye5egq"
-    },
-    {
-      "type": "webhook",
-      "config": "tool_configs/demo-book.json",
-      "id": "tool_7801m0njbx7cf97vnpysar4dp29t"
-    },
-    {
-      "type": "webhook",
-      "config": "tool_configs/demo-reschedule.json",
-      "id": "tool_1301m0njbxf6e528k33hvsn5pqy2"
-    },
-    {
-      "type": "webhook",
-      "config": "tool_configs/demo-cancel.json",
-      "id": "tool_8401m0njbxn0fyqtq81b4wvjhnkk"
-    },
-    {
-      "type": "webhook",
-      "config": "tool_configs/demo-waitlist.json",
-      "id": "tool_0501m0njbxtqf1sssmcvsbgp5y1w"
-    },
-    {
-      "type": "webhook",
-      "config": "tool_configs/demo-knowledge.json",
-      "id": "tool_0601m0njby1be1frrz5kmmdj05yc"
-    },
-    {
-      "type": "webhook",
-      "config": "tool_configs/demo-escalate.json",
-      "id": "tool_5301m0njby6qe0kbfrt2gypj6bmb"
-    }
-  ]
+    "tools": [
+        {
+            "type": "webhook",
+            "config": "tool_configs/demo-availability.json",
+            "id": "tool_7301m0njbx0per4vzpacv9ye5egq"
+        },
+        {
+            "type": "webhook",
+            "config": "tool_configs/demo-book.json",
+            "id": "tool_7801m0njbx7cf97vnpysar4dp29t"
+        },
+        {
+            "type": "webhook",
+            "config": "tool_configs/demo-reschedule.json",
+            "id": "tool_1301m0njbxf6e528k33hvsn5pqy2"
+        },
+        {
+            "type": "webhook",
+            "config": "tool_configs/demo-cancel.json",
+            "id": "tool_8401m0njbxn0fyqtq81b4wvjhnkk"
+        },
+        {
+            "type": "webhook",
+            "config": "tool_configs/demo-waitlist.json",
+            "id": "tool_0501m0njbxtqf1sssmcvsbgp5y1w"
+        },
+        {
+            "type": "webhook",
+            "config": "tool_configs/demo-knowledge.json",
+            "id": "tool_0601m0njby1be1frrz5kmmdj05yc"
+        },
+        {
+            "type": "webhook",
+            "config": "tool_configs/demo-escalate.json",
+            "id": "tool_5301m0njby6qe0kbfrt2gypj6bmb"
+        }
+    ]
 }
